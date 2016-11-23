@@ -948,7 +948,7 @@ ground->shadow_darkness = 0.65;
  sword.AmbientStr = 0.6;
  sword.DiffuseStr = 0.6;
  sword.SpecularStr = 0.2;
- sword.ShiniStr = 64; // 4 8 16 ... 256 
+ sword.ShiniStr = 8; // 4 8 16 ... 256 
  sword.angle=-0.2;
  sword.acca=0.105;
  sword.var=3.0;
@@ -1526,7 +1526,7 @@ static void draw() {
 
 
  //DRAW SCREEN
- /*screen_shader.Use();
+ screen_shader.Use();
  glActiveTexture(GL_TEXTURE0);
  glBindTexture(GL_TEXTURE_2D, tex_depth_house);
 
@@ -1535,7 +1535,7 @@ static void draw() {
  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
  glBindVertexArray(0);
- glUseProgram(0);*/
+ glUseProgram(0);
  
 
 

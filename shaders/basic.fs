@@ -233,10 +233,10 @@ void main(void) {
 
     color = texture(texture_diffuse1, TexCoord).rgb;
     
-    if(var == 7.0){
+   /* if(var == 7.0){
       //color = texture(texture_specular1, TexCoord).rgb;
       color = vec3(1.0);
-    }
+    }*/
 
     //color = vec3(1.0);
 
