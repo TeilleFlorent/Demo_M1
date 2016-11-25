@@ -1,7 +1,9 @@
 #version 330
 
 #define NB_LIGHTS 10
-
+#define G_SCATTERING 0.3
+#define PI 3.14159265358979323846264338
+#define NB_STEPS 80
 
 struct LightRes {    
     vec3 ambient;
@@ -49,6 +51,8 @@ uniform float fog_density;
 uniform float fog_equation;
 uniform vec4 fog_color;
 uniform vec3 mid_fog_position;
+
+uniform mat4 lightSpaceMatrix;
 
 
 uniform sampler2D texture_diffuse1;
@@ -220,6 +224,63 @@ float FogCalculation(float fStart, float fEnd, float fDensity, float iEquation, 
   fResult = 1.0-clamp(fResult, 0.0, 1.0);
   
   return fResult;
+}
+
+// scaterring calculé avec la fonction de Henyey-Greenstein
+float ComputeScattering(float lightDotView){
+
+  float result = 1.0f - G_SCATTERING * G_SCATTERING;
+  result /= (4.0f * PI * pow(1.0f + G_SCATTERING * G_SCATTERING - (2.0f * G_SCATTERING) *      lightDotView, 1.5f));
+  return result;
+
+}
+
+
+vec3 VolumetricLightCalculation(){
+
+  vec3 acc = vec3(0.0);
+
+  vec3 frag_pos = FragPos;
+  vec3 start_ray_position = viewPos;
+  vec3 end_ray_position = frag_pos; // a modif => frag_pos de la premiere intersection 
+
+  vec3 ray_vector = end_ray_position - start_ray_position;
+  float ray_length = length(ray_vector);
+
+  vec3 ray_direction = ray_vector / ray_length;
+  float step_length = ray_length / NB_STEPS;
+
+  vec3 step = ray_direction * step_length;
+
+  vec3 current_ray_position = start_ray_position;
+
+  for(int i = 0; i < NB_STEPS; i++){
+
+    //float4 worldInShadowCameraSpace = mul(float4(currentPosition, 1.0f), g_ShadowViewProjectionMatrix);
+    //worldInShadowCameraSpace /= worldInShadowCameraSpace.w;
+
+    vec4 frag_pos_light_space = lightSpaceMatrix * vec4(current_ray_position, 1.0);
+
+    vec3 projCoords = frag_pos_light_space.xyz / frag_pos_light_space.w;
+    projCoords = projCoords * 0.5 + 0.5;
+
+
+    //float shadowMapValue = shadowMap.Load(uint3(shadowmapTexCoord, 0)).r;
+    float shadowMapValue = texture(shadow_map1, projCoords.xy).r;
+
+    vec3 light_direction = normalize(LightPos[2] - /*FragPos*/ current_ray_position);
+    
+    if(shadowMapValue > projCoords.z)
+    {
+      acc += vec3(ComputeScattering(dot(ray_direction, light_direction))) * vec3(1.0,1.0,1.0);
+
+    }
+    current_ray_position += step;
+  }
+
+  acc /= NB_STEPS;
+
+  return acc;
 }
 
 
@@ -410,6 +471,10 @@ void main(void) {
         }
       }
     }
+
+    // ADD VOLUMETRIC LIGHT
+    result += VolumetricLightCalculation() * 5.0;
+
 
     fragColor = vec4(result, final_alpha);
     // ADD FOG

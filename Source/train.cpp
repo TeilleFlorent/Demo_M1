@@ -798,7 +798,7 @@ glBindTexture(GL_TEXTURE_2D, 0);
 
 
  // TEX DEPTH MAP HOUSE
-  depth_map_res_x_house = depth_map_res_seed * 8;
+  depth_map_res_x_house = depth_map_res_seed * 2;
   depth_map_res_y_house = depth_map_res_x_house * ((float)h/(float)w);
 
   glGenTextures(1, &tex_depth_house);
@@ -1130,7 +1130,7 @@ ground->shadow_darkness = 0.65;
 
 
   if(fly_state == true)
-    camera_speed = walk_speed*60;
+    camera_speed = walk_speed*6;
 
   //printf("camera_speed = %f\n", camera_speed);
 
