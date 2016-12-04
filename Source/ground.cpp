@@ -152,24 +152,23 @@ class CMultiLayeredHeightmap
         vector< vector< glm::vec3> > vVertexData(iRows, vector<glm::vec3>(iCols));
         vector< vector< glm::vec2> > vCoordsData(iRows, vector<glm::vec2>(iCols));
 
+        std::cout << "\nGround vertices = " << iRows * iCols << std::endl << std::endl;
 
         float fTextureU = float(iCols)*0.1f;
         float fTextureV = float(iRows)*0.1f;
 
-	//int acc = 0;
-
-	   /*FOR(i, iRows)*/for(int i = 0; i < iRows; i++)
+        int acc = 0;
+        for(int i = 0; i < iRows; i++)
         {
-		   /*FOR(j, iCols)*/for(int j = 0; j < iCols; j++)
+        	for(int j = 0; j < iCols; j++)
         	{
 			//std::cout << "test = " << i*j << "   " << bDataPointer << std::endl;
-			//bDataPointer+= ptr_inc /* 1 */;
-
+			
         		float fScaleC = float(j)/float(iCols-1);
         		float fScaleR = float(i)/float(iRows-1);
 
         		float temp = Getpixel(t,i,j);
-			//printf("%d temp = %f\n", acc++, temp);
+        		//printf("%d temp = %f\n", acc++, temp);
 			    float fVertexHeight = /*float(*((bDataPointer)+row_step*i+j*ptr_inc))*/temp/ /*90000000.0f*0.5f;*/ 300000000.0f;
         		vVertexData[i][j] = glm::vec3(-0.5f+fScaleC, fVertexHeight, -0.5f+fScaleR);
         		vCoordsData[i][j] = glm::vec2(fTextureU*fScaleC, fTextureV*fScaleR);

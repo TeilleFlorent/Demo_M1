@@ -3,7 +3,7 @@
 #define NB_LIGHTS 10
 #define G_SCATTERING 0.3
 #define PI 3.14159265358979323846264338
-#define NB_STEPS 80
+#define NB_STEPS 10
 
 struct LightRes {    
     vec3 ambient;
@@ -64,6 +64,7 @@ uniform sampler2D depth_map_particle;
 uniform sampler2D tex_render_particle;
 uniform samplerCube reflection_cubeMap;
 uniform sampler2D shadow_map1;
+
 
 
 LightRes LightCalculation(int num_light, vec3 norm, vec3 color, vec3 light_color, vec3 light_specular_color){
@@ -239,6 +240,11 @@ float ComputeScattering(float lightDotView){
 vec3 VolumetricLightCalculation(){
 
   vec3 acc = vec3(0.0);
+  mat4 noise = mat4(vec4(0.0f, 0.5f, 0.125f, 0.625f),
+    vec4(0.75f, 0.22f, 0.875f, 0.375f),
+    vec4(0.1875f, 0.6875f, 0.0625f, 0.5625),
+    vec4(0.9375f, 0.4375f, 0.8125f, 0.3125));
+
 
   vec3 frag_pos = FragPos;
   vec3 start_ray_position = viewPos;
@@ -256,16 +262,13 @@ vec3 VolumetricLightCalculation(){
 
   for(int i = 0; i < NB_STEPS; i++){
 
-    //float4 worldInShadowCameraSpace = mul(float4(currentPosition, 1.0f), g_ShadowViewProjectionMatrix);
-    //worldInShadowCameraSpace /= worldInShadowCameraSpace.w;
 
     vec4 frag_pos_light_space = lightSpaceMatrix * vec4(current_ray_position, 1.0);
 
     vec3 projCoords = frag_pos_light_space.xyz / frag_pos_light_space.w;
     projCoords = projCoords * 0.5 + 0.5;
 
-
-    //float shadowMapValue = shadowMap.Load(uint3(shadowmapTexCoord, 0)).r;
+   
     float shadowMapValue = texture(shadow_map1, projCoords.xy).r;
 
     vec3 light_direction = normalize(LightPos[2] - /*FragPos*/ current_ray_position);
@@ -275,7 +278,17 @@ vec3 VolumetricLightCalculation(){
       acc += vec3(ComputeScattering(dot(ray_direction, light_direction))) * vec3(1.0,1.0,1.0);
 
     }
-    current_ray_position += step;
+ 
+    // noise correction
+    float scale = 1.0;
+    float temp_x = gl_FragCoord.x * scale;
+    float temp_y = gl_FragCoord.y * scale;
+    temp_x = mod(temp_x, 4.0);
+    temp_y = mod(temp_y, 4.0);
+    float ditherValue = noise[int(temp_x)][int(temp_y)];
+
+    current_ray_position += step * ditherValue;
+  
   }
 
   acc /= NB_STEPS;
@@ -473,10 +486,15 @@ void main(void) {
     }
 
     // ADD VOLUMETRIC LIGHT
-    result += VolumetricLightCalculation() * 5.0;
+    float temp_res = VolumetricLightCalculation();
+    result += (temp_res * 5.0);
+    /*if(temp_res > 0.01){
+      result = vec3(1.0,0.0,0.0);
+    }*/
 
 
     fragColor = vec4(result, final_alpha);
+
     // ADD FOG
     if(var == 2.0 || var == 0.0){
       //float FogCoord = abs(EyeSpacePos.z/EyeSpacePos.w);

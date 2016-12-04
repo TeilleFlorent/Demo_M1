@@ -15,13 +15,13 @@ void main(void) {
   float final_alpha = 1.0;
 
   //result = vec3(0.0,0.0,1.0);
-  float temp_depth = texture(depth_map_feu, TexCoord).r;
+  //float temp_depth = texture(depth_map_feu, TexCoord).r;
   //temp_depth = 0.1 * 1000.0 / ((temp_depth * (1000.0 - 0.1)) - 1000.0);
             
-  result = vec3(temp_depth);
+  //result = vec3(temp_depth);
   
-  /*result = texture(depth_map_feu, TexCoord).rgb;
-  final_alpha = texture(depth_map_feu, TexCoord).a;*/
+  result = texture(depth_map_feu, TexCoord).rgb;
+  final_alpha = texture(depth_map_feu, TexCoord).a;
 
 
   //result = texture(tex_particle, TexCoord).rgb;

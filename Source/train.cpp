@@ -57,6 +57,8 @@ GLuint particle_depth_FBO;
 GLuint house_depth_FBO;
 GLuint reflection_cubeMap_FBO;
 GLuint reflection_cubeMap_RBO;
+GLuint VL_FBO;
+GLuint VL_RBO;
 
 // identifiant du (futur) identifiant de texture
 static GLuint tex_cube_map = 0;
@@ -71,12 +73,15 @@ static GLuint tex_pre_rendu_feu2 = 0;
 static GLuint tex_depth_feu2 = 0; 
 static GLuint tex_depth_particle2 = 0;
 static GLuint tex_depth_house = 0;
+static GLuint tex_color_VL = 0;
 
 
 float depth_map_res_seed = /*2048.0*/ 1024;
 float depth_map_res_x, depth_map_res_y, depth_map_res_x_house, depth_map_res_y_house;
 static GLuint reflection_cubeMap = 0;
 float reflection_cubeMap_res = /*2048.0*/ 1024;
+float tex_VL_res_seed = 1024;
+float tex_VL_res_x, tex_VL_res_y;
 
 //dimension fenetre SDL
 static int w = 800 * 1.5;
@@ -315,6 +320,8 @@ static void quit(void) {
     glDeleteTextures(1, &reflection_cubeMap);
   if(tex_depth_house)
     glDeleteTextures(1, &tex_depth_house);
+  if(tex_color_VL)
+    glDeleteTextures(1, &tex_color_VL);
 
 
 
@@ -390,7 +397,7 @@ static void initGL(SDL_Window * win) {
   //glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
   glEnable(GL_DEPTH_TEST);
   glClearDepth(1.0);
-  
+
   glDepthFunc(GL_LESS); 
   
   resizeGL(win);
@@ -462,6 +469,7 @@ static void initData(void) {
   1.0f, -1.0f, -1.0f,
   -1.0f, -1.0f,  1.0f,
   1.0f, -1.0f,  1.0f
+
 };
 
 
@@ -504,6 +512,8 @@ glGenFramebuffers(1, &particle_depth_FBO);
 glGenFramebuffers(1, &reflection_cubeMap_FBO);
 glGenRenderbuffers(1, &reflection_cubeMap_RBO); // RBO du FBO
 glGenFramebuffers(1, &house_depth_FBO);
+glGenFramebuffers(1, &VL_FBO);
+glGenRenderbuffers(1, &VL_RBO); // RBO du FBO
 
 
 //////////////////////////////
@@ -798,7 +808,7 @@ glBindTexture(GL_TEXTURE_2D, 0);
 
 
  // TEX DEPTH MAP HOUSE
-  depth_map_res_x_house = depth_map_res_seed * 2;
+  depth_map_res_x_house = depth_map_res_seed * 6;
   depth_map_res_y_house = depth_map_res_x_house * ((float)h/(float)w);
 
   glGenTextures(1, &tex_depth_house);
@@ -816,6 +826,36 @@ glBindTexture(GL_TEXTURE_2D, 0);
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, tex_depth_house, 0);
   //glDrawBuffer(GL_NONE);
   //glReadBuffer(GL_NONE);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glBindTexture(GL_TEXTURE_2D, 0);
+
+  // TEX COLOR VL
+  tex_VL_res_x = tex_VL_res_seed;  
+  tex_VL_res_y = tex_VL_res_x * ((float)h/(float)w);
+
+  glGenTextures(1, &tex_color_VL);
+  glBindTexture(GL_TEXTURE_2D, tex_color_VL);
+ 
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex_VL_res_x, tex_VL_res_y, 0, GL_RGBA, GL_FLOAT, NULL);
+   
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  /*glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);*/
+ 
+  // RBO & FBO attach
+  glBindFramebuffer(GL_FRAMEBUFFER, VL_FBO);
+  glBindRenderbuffer(GL_RENDERBUFFER, VL_RBO);
+  glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, tex_VL_res_x, tex_VL_res_y);
+  glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, VL_RBO);
+  glBindRenderbuffer(GL_RENDERBUFFER, 0);
+  
+
+  Status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+  if (Status != GL_FRAMEBUFFER_COMPLETE) {
+    printf("FBO BUUUG, status: 0x%x\n", Status);
+  } 
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glBindTexture(GL_TEXTURE_2D, 0);
 
@@ -1130,7 +1170,7 @@ ground->shadow_darkness = 0.65;
 
 
   if(fly_state == true)
-    camera_speed = walk_speed*6;
+    camera_speed = walk_speed*50;
 
   //printf("camera_speed = %f\n", camera_speed);
 
@@ -1244,10 +1284,6 @@ ground->shadow_darkness = 0.65;
 
 
     }
-  }
-
-  if(fly_state == false){
-      cameraPos.y = MyBarryCentric(p1,p2,p3, glm::vec2(cameraPos.x,cameraPos.z)) + ground->y + taille;
   }
 
 }
@@ -1528,7 +1564,7 @@ static void draw() {
  //DRAW SCREEN
  screen_shader.Use();
  glActiveTexture(GL_TEXTURE0);
- glBindTexture(GL_TEXTURE_2D, tex_depth_house);
+ glBindTexture(GL_TEXTURE_2D, tex_color_VL);
 
  glBindVertexArray(screenVAO);
 
@@ -1539,51 +1575,31 @@ static void draw() {
  
 
 
-
- // DRAW SKYBOX 
- glDepthMask(GL_FALSE); // desactivé juste pour draw la skybox
- skybox_shader.Use();   
- glm::mat4 SkyboxViewMatrix = glm::mat4(glm::mat3(viewMatrix));  // Remove any translation component of the view matrix
- glUniformMatrix4fv(glGetUniformLocation(skybox_shader.Program, "view"), 1, GL_FALSE, glm::value_ptr(SkyboxViewMatrix));
- glUniformMatrix4fv(glGetUniformLocation(skybox_shader.Program, "projection"), 1, GL_FALSE, glm::value_ptr(projectionM));
- glUniform1f(glGetUniformLocation(skybox_shader.Program, "alpha"), skybox_alpha);
- glUniform1f(glGetUniformLocation(skybox_shader.Program, "is_foggy"), 1.0);
- 
- glBindVertexArray(skyboxVAO);
- glActiveTexture(GL_TEXTURE0);
- glUniform1i(glGetUniformLocation(skybox_shader.Program, "skybox"), 0); // envoi du sampler cube 
- glBindTexture(GL_TEXTURE_CUBE_MAP, tex_cube_map /*reflection_cubeMap*/); // bind les 6 textures du cube map
- 
- glEnable(GL_BLEND);
- glDrawArrays(GL_TRIANGLES, 0, 36);
- glDisable(GL_BLEND);
-
- glBindVertexArray(0);
- glDepthMask(GL_TRUE);  // réactivé pour draw le reste
- glUseProgram(0);
-
-
  // pre rendu feu
  glViewport(0, 0, depth_map_res_x, depth_map_res_y);
- Pre_rendu_feu(projectionM2, viewMatrix, -1.0f);
+ //Pre_rendu_feu(projectionM2, viewMatrix, -1.0f);
  
  //pre rendu reflection cube map
  glViewport(0, 0, reflection_cubeMap_res, reflection_cubeMap_res);
- Pre_rendu_cubeMap();
+ //Pre_rendu_cubeMap();
 
  //pre rendu shadow
  glViewport(0, 0, depth_map_res_x_house, depth_map_res_y_house);
  Pre_rendu_shadow_house(projectionM3, viewMatrix);
 
+ // rendu scene pour la VL
+ glViewport(0, 0, tex_VL_res_x, tex_VL_res_y);
+ RenderShadowedObjects(true);
 
-  //rendu normal        
+ // rendu scene normal        
  glViewport(0, 0, w, h);
- RenderShadowedObjects();
+ RenderShadowedObjects(false);
 
  glUseProgram(0);
         
 
 }
+
 
 void Pre_rendu_feu(glm::mat4 projectionMatrix, glm::mat4 viewMatrix, float face_cube){
 
@@ -1724,7 +1740,6 @@ void Pre_rendu_cubeMap(){
   cubeMap_viewMatrices.push_back(glm::lookAt(glm::vec3(paladin_pos), glm::vec3(paladin_pos) + glm::vec3( 0.0,  0.0, -1.0), glm::vec3(0.0, -1.0, 0.0)));
 
 
-  //glViewport(0, 0, reflection_cubeMap_res, reflection_cubeMap_res);
 
   glBindFramebuffer(GL_FRAMEBUFFER, reflection_cubeMap_FBO);
   
@@ -1762,6 +1777,8 @@ void Pre_rendu_cubeMap(){
     glUniformMatrix4fv(glGetUniformLocation(skybox_shader.Program, "projection"), 1, GL_FALSE, glm::value_ptr(projectionM));
     glUniform1f(glGetUniformLocation(skybox_shader.Program, "alpha"), 1.0);
     glUniform1f(glGetUniformLocation(skybox_shader.Program, "is_foggy"), 0.0);
+    glUniform1f(glGetUniformLocation(skybox_shader.Program, "is_volum_light"), 0.0);
+
 
     glBindVertexArray(skyboxVAO);
     glActiveTexture(GL_TEXTURE0);
@@ -2077,7 +2094,7 @@ void Pre_rendu_shadow_house(glm::mat4 projectionMatrix, glm::mat4 viewMatrix){
 }
 
 
-void RenderShadowedObjects(){
+void RenderShadowedObjects(bool VL_pre_rendering){
 
 
  glm::mat4 projectionM,Msend,viewMatrix,Msend2;
@@ -2086,14 +2103,62 @@ void RenderShadowedObjects(){
  viewMatrix=glm::lookAt(cameraPos, (cameraPos) + cameraFront, cameraUp); 
 
 
- glm::mat4 lightProjection, lightView, light_space_matrix;
+ glm::mat4 lightProjection, lightView, light_space_matrix, skybox_light_space_matrix;
  GLfloat far =  glm::distance(lights[2].lightPos, glm::vec3(house.x,house.y,house.z)) * 1.2f;
  lightProjection = glm::ortho(-5.0f, 5.0f, -5.0f, 5.0f, 1.0f, far);
  lightView = glm::lookAt(lights[2].lightPos, glm::vec3(house.x,house.y,house.z) , glm::vec3(0.0,1.0,0.0));
  light_space_matrix = lightProjection * lightView;
  glm::vec3 mid_fog_position = glm::vec3(house.x,house.y,house.z);
 
+ skybox_light_space_matrix = lightProjection * glm::mat4(glm::mat3(lightView));
 
+
+ if(VL_pre_rendering){
+  glBindFramebuffer(GL_FRAMEBUFFER, VL_FBO);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D , tex_color_VL, 0);
+  glClearColor(1.0f, 0.0f, 0.0f, 1.0f);
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+ }
+
+
+ // DRAW SKYBOX 
+ //glDepthMask(GL_FALSE); // desactivé juste pour draw la skybox
+ skybox_shader.Use();   
+ glm::mat4 SkyboxViewMatrix = glm::mat4(glm::mat3(viewMatrix));  // Remove any translation component of the view matrix
+
+ Msend = glm::mat4(1.0f);
+ Msend = glm::translate(Msend, glm::vec3(cameraPos.x, cameraPos.y, cameraPos.z));
+ Msend = glm::scale(Msend, glm::vec3(100.0f)); 
+
+ glUniformMatrix4fv(glGetUniformLocation(skybox_shader.Program, "view"), 1, GL_FALSE, glm::value_ptr(/*SkyboxViewMatrix*/ viewMatrix));
+ glUniformMatrix4fv(glGetUniformLocation(skybox_shader.Program, "projection"), 1, GL_FALSE, glm::value_ptr(projectionM));
+ glUniformMatrix4fv(glGetUniformLocation(skybox_shader.Program, "model"), 1, GL_FALSE, glm::value_ptr(Msend));
+
+ glUniform1f(glGetUniformLocation(skybox_shader.Program, "alpha"), skybox_alpha);
+ glUniform1f(glGetUniformLocation(skybox_shader.Program, "is_foggy"), 1.0);
+ glUniform1f(glGetUniformLocation(skybox_shader.Program, "is_volum_light"), 1.0); 
+ glUniform3fv(glGetUniformLocation(skybox_shader.Program, "viewPos"), 1, &cameraPos[0]);
+ glUniformMatrix4fv(glGetUniformLocation(skybox_shader.Program, "lightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(light_space_matrix /*skybox_light_space_matrix*/)); 
+ glUniform3fv(glGetUniformLocation(skybox_shader.Program, "LightPos[2]"),1, &lights[2].lightPos[0]);
+
+
+ glBindVertexArray(skyboxVAO);
+ glActiveTexture(GL_TEXTURE0);
+ glUniform1i(glGetUniformLocation(skybox_shader.Program, "skybox"), 0); // envoi du sampler cube 
+ glBindTexture(GL_TEXTURE_CUBE_MAP, tex_cube_map /*reflection_cubeMap*/); // bind les 6 textures du cube map
+ 
+ glActiveTexture(GL_TEXTURE1);
+ glUniform1i(glGetUniformLocation(skybox_shader.Program, "shadow_map1"), 1);  
+ glBindTexture(GL_TEXTURE_2D, tex_depth_house); 
+ 
+
+ glEnable(GL_BLEND);
+ glDrawArrays(GL_TRIANGLES, 0, 36);
+ glDisable(GL_BLEND);
+
+ glBindVertexArray(0);
+ //glDepthMask(GL_TRUE);  // réactivé pour draw le reste
+ glUseProgram(0);
 
   // DRAW LAMP
  /*lamp_shader.Use();
@@ -2254,7 +2319,7 @@ void RenderShadowedObjects(){
   
  glEnable(GL_CULL_FACE);
  glCullFace(GL_BACK); 
- feu_model.Draw(basic_shader, Msend2, false);
+ //feu_model.Draw(basic_shader, Msend2, false);
  glDisable(GL_CULL_FACE);
 
  glBindVertexArray(0);
@@ -2418,7 +2483,7 @@ void RenderShadowedObjects(){
    
  glEnable(GL_CULL_FACE);
  glCullFace(GL_BACK); 
- paladin_skinned.Render(); 
+ //paladin_skinned.Render(); 
  glDisable(GL_CULL_FACE);
 
  glBindVertexArray(0);
@@ -2551,10 +2616,7 @@ void RenderShadowedObjects(){
  glUniform3fv(glGetUniformLocation(basic_shader.Program, "mid_fog_position"), 1, &mid_fog_position[0]);
 
   
-  //glEnable(GL_CULL_FACE);
-  //glCullFace(GL_BACK);
- sword_model.Draw(basic_shader, Msend2, false);
-  //glDisable(GL_CULL_FACE);
+ //sword_model.Draw(basic_shader, Msend2, false);
     
 
  glBindVertexArray(0);
@@ -2620,7 +2682,7 @@ void RenderShadowedObjects(){
   
   glEnable(GL_CULL_FACE);
   glCullFace(GL_BACK);
-  shield_model.Draw(basic_shader, Msend2, false);
+  //shield_model.Draw(basic_shader, Msend2, false);
   glDisable(GL_CULL_FACE);
     
 
@@ -2779,11 +2841,14 @@ void RenderShadowedObjects(){
   glUniform1f(glGetUniformLocation(particule_shader.Program, "face_cube"), -1.0);
   
 
-  Particles -> Draw(true,false);
+  //Particles -> Draw(true,false);
 
   glUseProgram(0);  
  
 
+  if(VL_pre_rendering){
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  }
 
 }
 
@@ -2868,29 +2933,6 @@ static GLfloat * buildSphere(int longitudes, int latitudes) {
   }
   return data;
 }
-
-
-
-float MyBarryCentric(glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, glm::vec2 pos) {
-/*
-      std::cout << "p1 = " << p1.x << " "  << p1.y << " " << p1.z << std::endl;    
-  std::cout << "p2 = " << p2.x << " "  << p2.y << " " << p2.z << std::endl;    
-  std::cout << "p3 = " << p3.x << " "  << p3.y << " " << p3.z << std::endl;    
-*/
-
-  float det = (p2.z - p3.z) * (p1.x - p3.x) + (p3.x - p2.x) * (p1.z - p3.z);
-    //printf("det = %f\n", det);
-  float l1 = ((p2.z - p3.z) * (pos.x - p3.x) + (p3.x - p2.x) * (pos.y - p3.z)) / det;
-    //printf("l1 = %f\n", l1);
-  float l2 = ((p3.z - p1.z) * (pos.x - p3.x) + (p1.x - p3.x) * (pos.y - p3.z)) / det;
-    //printf("l2 = %f\n", l2);
-  float l3 = 1.0f - l1 - l2;
-    //printf("l3 = %f\n", l3);
-
-  return l1 * p1.y + l2 * p2.y + l3 * p3.y;
-}
-
-
 
 
 
