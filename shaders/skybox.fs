@@ -13,7 +13,7 @@ uniform samplerCube skybox;
 uniform float alpha;
 uniform float is_foggy;
 
-uniform float is_volum_light;
+uniform float VL_intensity;
 uniform vec3 viewPos;
 uniform mat4 lightSpaceMatrix;
 uniform mat4 model;
@@ -97,9 +97,10 @@ vec3 VolumetricLightCalculation(){
 void main(){    
 	
     vec3 result,color;
-    float final_alpha;
+    float final_alpha = 1.0;
 
     color = texture(skybox, TexCoords).rgb;
+    //color = vec3(texture(skybox, TexCoords).r);
 
     //color = vec3(0.0,0.0,0.0);
 
@@ -131,7 +132,7 @@ void main(){
     //color = vec4(sum.rgb * 1.3f ,alpha);
 
 
-    // ADD FOG
+    ////////// ADD FOG
     float res;
     vec3 factor;
     if(is_foggy == 1.0){
@@ -162,22 +163,20 @@ void main(){
         res = 1.0;
         factor = vec3(1.3);
     }
-
     color *= factor;
+    final_alpha = res;
+
+    ///////////////////
+    
 
     result = color;
 
     // ADD VOLUMETRIC LIGHT
-    if(is_volum_light == 1.0){
-       result += VolumetricLightCalculation() * 5.0;
+    if(VL_intensity > 0.0){
+       result += VolumetricLightCalculation() * 5.0 * VL_intensity;
     }
 
-
-
     
-    final_alpha = res;
-    final_alpha = 1.0;
-
     fragColor = vec4(result , final_alpha);
 
 }

@@ -40,12 +40,14 @@ uniform float specularSTR;
 uniform float shadow_darkness;
 
 uniform float fire_intensity;
+uniform float VL_intensity;
 
 uniform float alpha;
 uniform float var;
 uniform float depth_test;
 uniform float face_cube;
 uniform float send_bias;
+uniform int shadow_point_light;
 
 uniform float fog_density;
 uniform float fog_equation;
@@ -64,6 +66,7 @@ uniform sampler2D depth_map_particle;
 uniform sampler2D tex_render_particle;
 uniform samplerCube reflection_cubeMap;
 uniform sampler2D shadow_map1;
+uniform samplerCube shadow_cube_map;
 
 
 
@@ -297,17 +300,52 @@ vec3 VolumetricLightCalculation(){
 }
 
 
+// tableau d'offset de direction
+vec3 gridSamplingDisk[20] = vec3[]
+(
+   vec3(1, 1, 1), vec3(1, -1, 1), vec3(-1, -1, 1), vec3(-1, 1, 1), 
+   vec3(1, 1, -1), vec3(1, -1, -1), vec3(-1, -1, -1), vec3(-1, 1, -1),
+   vec3(1, 1, 0), vec3(1, -1, 0), vec3(-1, -1, 0), vec3(-1, 1, 0),
+   vec3(1, 0, 1), vec3(-1, 0, 1), vec3(1, 0, -1), vec3(-1, 0, -1),
+   vec3(0, 1, 1), vec3(0, -1, 1), vec3(0, -1, -1), vec3(0, 1, -1)
+);
+
+float ShadowCubeMapCalculation(vec3 fragPos)
+{
+    vec3 fragToLight = fragPos - LightPos[1];
+    float currentDepth = length(fragToLight);
+  
+    float shadow = 0.0;
+    float bias = 0.001;
+    int samples = /*20*/ 1;
+    float viewDistance = length(viewPos - fragPos);
+    float diskRadius = (1.0 + (viewDistance / /*far_plane*/ 1000.0)) / /*25.0*/ 450;
+    for(int i = 0; i < samples; ++i)
+    {
+        float closestDepth = texture(shadow_cube_map, fragToLight + gridSamplingDisk[i] * diskRadius).r;
+        closestDepth *= /*far_plane*/ 1000.0;  
+        if(currentDepth - bias > closestDepth)
+            shadow += 1.0;
+    }
+    shadow /= float(samples);
+        
+    return shadow;
+}
+
+
 
 void main(void) {
+  // re init
+  gl_FragDepth = gl_FragCoord.z;
 
-  if(depth_test != 1.0){
+  if(depth_test == 0.0){
 
     vec3 color;
     float final_alpha;
 
     color = texture(texture_diffuse1, TexCoord).rgb;
     
-   /* if(var == 7.0){
+    /*if(var == 2.0){
       //color = texture(texture_specular1, TexCoord).rgb;
       color = vec3(1.0);
     }*/
@@ -340,6 +378,17 @@ void main(void) {
       
       LightRes1.diffuse *= shadow_intensity;
       LightRes1.specular *= shadow_intensity;
+    }
+
+    // POINT SHADOW CALCULATION
+    if(var == 2.0 && shadow_point_light == 1){
+      float shadow_intensity = ShadowCubeMapCalculation(FragPos) * 0.65;
+      LightRes2.diffuse *= (1.0 - shadow_intensity);
+      LightRes2.specular *= (1.0 - shadow_intensity);
+      
+      LightRes1.diffuse *= (1.0 - shadow_intensity);
+      LightRes1.specular *= (1.0 - shadow_intensity);
+    
     }
 
 
@@ -402,43 +451,16 @@ void main(void) {
       vec3 I = normalize(vec3(FragPos.x ,FragPos.y,FragPos.z ) - vec3(viewPos.x, viewPos.y, viewPos.z));
       vec3 R = reflect(vec3(I.x * 1.0, I.y * 1.0, I.z * 1.0), norm * vec3(-0.2f));
      
-      // get blurred reflection fragment
-     vec4 sum = vec4(0.0);
-     vec3 tc = R;
-     float resolution = 1024 * 2.0;
-     float radius = 20.0;
-     vec3 dir = vec3(1.0,1.0,1.0);
+      vec3 color_reflect = texture(reflection_cubeMap, R).rgb;
 
-     float blur = radius / resolution;
-
-     float hstep = dir.x;
-     float vstep = dir.y;
-     float zstep = dir.z;
-
-
-     sum += texture(reflection_cubeMap, vec3(tc.x - 4.0*blur*hstep, tc.y - 4.0*blur*vstep, tc.z - 4.0*blur*zstep)) * 0.0162162162;
-     sum += texture(reflection_cubeMap, vec3(tc.x - 3.0*blur*hstep, tc.y - 3.0*blur*vstep, tc.z - 3.0*blur*zstep)) * 0.0540540541;
-     sum += texture(reflection_cubeMap, vec3(tc.x - 2.0*blur*hstep, tc.y - 2.0*blur*vstep, tc.z - 2.0*blur*zstep)) * 0.1216216216;
-     sum += texture(reflection_cubeMap, vec3(tc.x - 1.0*blur*hstep, tc.y - 1.0*blur*vstep, tc.z - 1.0*blur*zstep)) * 0.1945945946;
-
-     sum += texture(reflection_cubeMap, vec3(tc.x, tc.y, tc.z)) * 0.2270270270;
-
-     sum += texture(reflection_cubeMap, vec3(tc.x + 1.0*blur*hstep, tc.y + 1.0*blur*vstep, tc.z - 1.0*blur*zstep)) * 0.1945945946;
-     sum += texture(reflection_cubeMap, vec3(tc.x + 2.0*blur*hstep, tc.y + 2.0*blur*vstep, tc.z - 2.0*blur*zstep)) * 0.1216216216;
-     sum += texture(reflection_cubeMap, vec3(tc.x + 3.0*blur*hstep, tc.y + 3.0*blur*vstep, tc.z - 3.0*blur*zstep)) * 0.0540540541;
-     sum += texture(reflection_cubeMap, vec3(tc.x + 4.0*blur*hstep, tc.y + 4.0*blur*vstep, tc.z - 4.0*blur*zstep)) * 0.0162162162;
-
-     //vec3 color_reflect = texture(reflection_cubeMap, R).rgb;
-     vec3 color_reflect = sum.rgb;
-
-     float factor = (color_reflect.r + color_reflect.g + (color_reflect.b)) / 3.0f;
+      float factor = (color_reflect.r + color_reflect.g + (color_reflect.b)) / 3.0f;
      //factor = 1.0;
      //factor = (color_reflect.r + color_reflect.g) / 2.0;
 
-     vec3 metalness_factor = texture(texture_metalness, TexCoord).rgb;
-     float final_factor = (metalness_factor.r + metalness_factor.g + metalness_factor.b) / (3.0f);
+      vec3 metalness_factor = texture(texture_metalness, TexCoord).rgb;
+      float final_factor = (metalness_factor.r + metalness_factor.g + metalness_factor.b) / (3.0f);
 
-     result = mix(result, color_reflect, (final_factor) * factor);
+      result = mix(result, color_reflect, (final_factor) * factor * 1.4);
 
     }
 
@@ -454,14 +476,14 @@ void main(void) {
 
 
     // FAKE VOLUMETRIC PARTICLE (on feu mesh)
-    if(var == 4.0 /*&& face_cube == -1.0*/){
+    if(var == 4.0 ){
 
       vec2 TexCoords2 = (position_for_tex.xy / position_for_tex.w);
       TexCoords2 = TexCoords2 * 0.5 + 0.5;
 
       float depth_feu = texture(depth_map_particle, TexCoords2).r;
 
-      if(/*gl_FragCoord.z < depth_feu &&*/ depth_feu != 1.0){
+      if(depth_feu != 1.0){
 
 
          // ADD COLOR FRAGMENT PARTICLE
@@ -479,19 +501,17 @@ void main(void) {
           temp.b *= 1.5;
 
           result = mix(result, temp.rgb, 0.75 * temp.a); // plus dist petite plus fact petit
-          //result = vec3(0.0,1.0,0.0);
-
+         
         }
       }
     }
 
     // ADD VOLUMETRIC LIGHT
-    float temp_res = VolumetricLightCalculation();
-    result += (temp_res * 5.0);
-    /*if(temp_res > 0.01){
-      result = vec3(1.0,0.0,0.0);
-    }*/
-
+    if(VL_intensity > 0.0){
+      float temp_res = VolumetricLightCalculation();
+      result += (temp_res * 5.0 * VL_intensity);
+    }
+   
 
     fragColor = vec4(result, final_alpha);
 
@@ -502,6 +522,16 @@ void main(void) {
       fragColor = mix(fragColor, fog_color, FogCalculation(0.0,0.0,fog_density,fog_equation,/*FogCoord*/ temp_dist));  
     }
 
+  }else{
+    if(face_cube != -1.0){
+     float far = 1000.0;
+     if(var == 5.0)
+      far = 1000.0 * 1.15;
+
+     float lightDistance = length(FragPos - viewPos);
+     lightDistance /= far;
+     gl_FragDepth = lightDistance; //near * far / ((gl_FragCoord.z * (far - near)) - far);          
+    }
   }
   
 }

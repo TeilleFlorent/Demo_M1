@@ -493,32 +493,20 @@ public:
     // draw tout les meshes du model
     void Draw(Shader shader, glm::mat4 modelview2,bool test)
     {
-        glm::mat4 Msend;
 
         for(GLuint i = 0; i < this->meshes.size(); i++){
 
             //std::cout << "test = " << this->meshes.size() << std::endl;
-              
-              Msend = glm::mat4(1.0);
+                     
+              if(test && this->model_id == 2){
+                  
+                  if(i <= 7)
+                      this->meshes[i].Draw(shader, this->model_id);
 
-              if(test){
-                  if(  i == 26 || i == 6 ){
-
-                    Msend = modelview2;
-
-                    glUniform1f(glGetUniformLocation(shader.Program, "var"), 3.0);
-
-                    glUniformMatrix4fv(glGetUniformLocation(shader.Program, "model2"), 1, GL_FALSE, glm::value_ptr(Msend));
-
-                }else{
-
-                    glUniform1f(glGetUniformLocation(shader.Program, "var"), 2.0);
-
-                }
-            }
+              }else{
             
-            this->meshes[i].Draw(shader, this->model_id);
-
+                  this->meshes[i].Draw(shader, this->model_id);
+              }
         }
     }
     
@@ -1113,6 +1101,8 @@ void fall_script();
 void script();
 void Pre_rendu_cubeMap();
 void Pre_rendu_shadow_house(glm::mat4, glm::mat4);
+void Pre_rendu_shadow_cubeMap();
+void RenderQuad();
 
   
 /////////////////////////////////

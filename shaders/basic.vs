@@ -1,7 +1,6 @@
 #version 330
 
 uniform mat4 modelViewMatrix;
-uniform mat4 model2;
 uniform mat4 projectionMatrix;
 uniform mat4 viewMatrix;
 uniform mat4 lightSpaceMatrix;
@@ -29,12 +28,7 @@ layout (location = 3) in vec3 tangent;
 
  	mat4 modelViewMatrix2, viewMatrix2;
 
- 	/*if(var == 3.0){
- 		modelViewMatrix2 = model2;
- 	}else{*/
- 		modelViewMatrix2 = modelViewMatrix;
- 	//}
-
+ 	modelViewMatrix2 = modelViewMatrix; 
 
  	if(face_cube != -1.0){
  		viewMatrix2 = cubeMap_viewMatrices[int(face_cube)];

@@ -6,8 +6,10 @@ uniform mat4 gBones[MAX_BONES];
 uniform mat4 modelViewMatrix;
 uniform mat4 projectionMatrix;
 uniform mat4 viewMatrix;
+uniform mat4 cubeMap_viewMatrices[6];
 uniform mat4 lightSpaceMatrix;
 uniform float var;
+uniform float face_cube;
 
 layout (location = 0) in vec3 vsiPosition;
 layout (location = 1) in vec3 normal;
@@ -54,13 +56,17 @@ layout (location = 8) in vec4 Weights[4];
 
  	modelViewMatrix2 = modelViewMatrix;
 
- 	viewMatrix2 = viewMatrix;
+    if(face_cube != -1.0){
+        viewMatrix2 = cubeMap_viewMatrices[int(face_cube)];
+    }else{
+        viewMatrix2 = viewMatrix;
+    }
 
  	vec4 out_position = projectionMatrix * viewMatrix2 * modelViewMatrix2 * temp_position /*vec4(vsiPosition, 1.0)*/;
  
  	gl_Position = out_position;
 
- 	FragPos=vec3(modelViewMatrix2 * vec4(vsiPosition,1.0f));
+ 	FragPos=vec3(modelViewMatrix2 * /*vec4(vsiPosition,1.0f)*/ temp_position);
 
     vec3 temp_normal = vec3(BoneTransform * vec4(normal, 0.0));
  	vsoNormal = mat3(transpose(inverse(modelViewMatrix2))) * /*normal*/ temp_normal;  

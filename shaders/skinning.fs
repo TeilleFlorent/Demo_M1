@@ -39,7 +39,10 @@ uniform float fire_intensity;
 uniform float alpha;
 uniform float var;
 uniform float depth_test;
+uniform float face_cube;
 uniform float send_bias;
+uniform float test_bias;
+uniform int shadow_point_light;
 
 
 uniform sampler2D texture_diffuse1;
@@ -47,6 +50,7 @@ uniform sampler2D texture_specular1;
 uniform sampler2D texture_normal1;
 uniform samplerCube reflection_cubeMap;
 uniform sampler2D shadow_map1;
+uniform samplerCube shadow_cube_map;
 
 
 LightRes LightCalculation(int num_light, vec3 norm, vec3 color, vec3 light_color, vec3 light_specular_color){
@@ -164,8 +168,44 @@ float ShadowCalculation1(vec4 fragPosLightSpace, vec3 norm, float darkness)
 }
 
 
+// tableau d'offset de direction
+vec3 gridSamplingDisk[20] = vec3[]
+(
+   vec3(1, 1, 1), vec3(1, -1, 1), vec3(-1, -1, 1), vec3(-1, 1, 1), 
+   vec3(1, 1, -1), vec3(1, -1, -1), vec3(-1, -1, -1), vec3(-1, 1, -1),
+   vec3(1, 1, 0), vec3(1, -1, 0), vec3(-1, -1, 0), vec3(-1, 1, 0),
+   vec3(1, 0, 1), vec3(-1, 0, 1), vec3(1, 0, -1), vec3(-1, 0, -1),
+   vec3(0, 1, 1), vec3(0, -1, 1), vec3(0, -1, -1), vec3(0, 1, -1)
+);
+
+float ShadowCubeMapCalculation(vec3 fragPos)
+{
+    vec3 fragToLight = fragPos - LightPos[1];
+    float currentDepth = length(fragToLight);
+  
+    float shadow = 0.0;
+    float bias = /*test_bias*/ 0.0413001;
+    int samples = /*20*/ 1;
+    float viewDistance = length(viewPos - fragPos);
+    float diskRadius = (1.0 + (viewDistance / /*far_plane*/ 1000.0)) / /*25.0*/ 450;
+    for(int i = 0; i < samples; ++i)
+    {
+        float closestDepth = texture(shadow_cube_map, fragToLight + gridSamplingDisk[i] * diskRadius).r;
+        closestDepth *= /*far_plane*/ 1000.0;  
+        if(currentDepth - bias > closestDepth)
+            shadow += 1.0;
+    }
+    shadow /= float(samples);
+        
+    return shadow;
+}
+
 
 void main(void) {
+
+  // re init
+  gl_FragDepth = gl_FragCoord.z;
+
 
   if(depth_test != 1.0){
 
@@ -202,6 +242,16 @@ void main(void) {
     LightRes1.diffuse *= shadow_intensity;
     LightRes1.specular *= shadow_intensity;
     
+    // POINT SHADOW CALCULATION
+    if(shadow_point_light == 1){
+      shadow_intensity = ShadowCubeMapCalculation(FragPos) * 1.0;
+      LightRes2.diffuse *= (1.0 - shadow_intensity);
+      LightRes2.specular *= (1.0 - shadow_intensity);
+    //LightRes1.diffuse *= (1.0 - shadow_intensity);
+    //LightRes1.specular *= (1.0 - shadow_intensity);
+    }
+
+    // FINAL LIGHT
     vec3 result = (LightRes1.ambient + LightRes1.diffuse + LightRes1.specular);
     result += (/*LightRes2.ambient*/ + LightRes2.diffuse*2.0 + LightRes2.specular*1.5);
 
@@ -211,42 +261,17 @@ void main(void) {
      vec3 I = normalize(FragPos - viewPos);
      vec3 R = reflect(I, norm);
   
-     vec3 base = texture(texture_diffuse1, TexCoord).rgb;
+     vec3 base = texture(texture_diffuse1, TexCoord).rgb;;
      float moy = (base.r + base.g + base.b) / 3.0;
      float test1 = abs(base.r - moy); 
      float test2 = abs(base.g - moy);
      float test3 = abs(base.b - moy);
      
-     if(test1 < 0.015 && test2 < 0.015 && test3 < 0.015){
-      //result = vec3(0.0,1.0,0.0);
-      
-      // get blurred reflection fragment
-      vec4 sum = vec4(0.0);
-      vec3 tc = R;
-      float resolution = 1024;
-      float radius = 15.0;
-      vec3 dir = vec3(1.0,1.0,1.0);
+     if(test1 < 0.015 && test2 < 0.015 && test3 < 0.015 && moy > 0.05){
+   
 
-      float blur = radius / resolution;
-
-      float hstep = dir.x;
-      float vstep = dir.y;
-      float zstep = dir.z;
-
-      sum += texture(reflection_cubeMap, vec3(tc.x - 4.0*blur*hstep, tc.y - 4.0*blur*vstep, tc.z - 4.0*blur*zstep)) * 0.0162162162;
-      sum += texture(reflection_cubeMap, vec3(tc.x - 3.0*blur*hstep, tc.y - 3.0*blur*vstep, tc.z - 3.0*blur*zstep)) * 0.0540540541;
-      sum += texture(reflection_cubeMap, vec3(tc.x - 2.0*blur*hstep, tc.y - 2.0*blur*vstep, tc.z - 2.0*blur*zstep)) * 0.1216216216;
-      sum += texture(reflection_cubeMap, vec3(tc.x - 1.0*blur*hstep, tc.y - 1.0*blur*vstep, tc.z - 1.0*blur*zstep)) * 0.1945945946;
-
-      sum += texture(reflection_cubeMap, vec3(tc.x, tc.y, tc.z)) * 0.2270270270;
-
-      sum += texture(reflection_cubeMap, vec3(tc.x + 1.0*blur*hstep, tc.y + 1.0*blur*vstep, tc.z - 1.0*blur*zstep)) * 0.1945945946;
-      sum += texture(reflection_cubeMap, vec3(tc.x + 2.0*blur*hstep, tc.y + 2.0*blur*vstep, tc.z - 2.0*blur*zstep)) * 0.1216216216;
-      sum += texture(reflection_cubeMap, vec3(tc.x + 3.0*blur*hstep, tc.y + 3.0*blur*vstep, tc.z - 3.0*blur*zstep)) * 0.0540540541;
-      sum += texture(reflection_cubeMap, vec3(tc.x + 4.0*blur*hstep, tc.y + 4.0*blur*vstep, tc.z - 4.0*blur*zstep)) * 0.0162162162;
-
-      //vec3 color_reflect = texture(reflection_cubeMap, R).rgb;
-      vec3 color_reflect = sum.rgb;
+      vec3 color_reflect = texture(reflection_cubeMap, R).rgb;
+      //vec3 color_reflect = sum.rgb;
 
       float factor = (color_reflect.r + color_reflect.g + color_reflect.b) / 3.0;
 
@@ -258,7 +283,14 @@ void main(void) {
 
     // final out color
     fragColor = vec4(result, final_alpha);
-
+    
+  }else{
+    if(face_cube != -1.0){
+     float far = 1000.0;
+     float lightDistance = length(FragPos - viewPos);
+     lightDistance /= far;
+     gl_FragDepth = lightDistance; //near * far / ((gl_FragCoord.z * (far - near)) - far);          
+    }
   }
   
 }

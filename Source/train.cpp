@@ -11,6 +11,7 @@ Shader lamp_shader;
 Shader skinning_shader;
 Shader particule_shader;
 Shader screen_shader;
+Shader blur_shader;
 
 
 // MODELS
@@ -26,25 +27,25 @@ SkinnedMesh_animation paladin_sitting_idle;
 SkinnedMesh_animation paladin_standing_up;
 SkinnedMesh_animation paladin_breathing_idle;
 SkinnedMesh_animation paladin_warrior_idle;
+vector<glm::mat4> Transforms;
+
 
 
 static GLint m_boneLocation[MAX_BONES];
 static GLint m_boneLocation2[MAX_BONES];
-static float Start_zombie_anim = 10000000000;
-static bool zombie_run_state = false;
 
 
 // HEIGHT MAP    
 CMultiLayeredHeightmap MyMap;
 
-
-/*!\brief identifiant du (futur) vertex array object */
+// VAOs
 static GLuint skyboxVAO = 0;
 static GLuint lampVAO = 0;
 static GLuint groundVAO = 0;
 static GLuint screenVAO = 0;
 
-/*!\brief identifiant du (futur) buffer de data */
+
+// VBOs
 static GLuint skyboxVBO = 0;
 static GLuint lampVBO = 0;
 static GLuint groundVBO = 0;
@@ -59,6 +60,9 @@ GLuint reflection_cubeMap_FBO;
 GLuint reflection_cubeMap_RBO;
 GLuint VL_FBO;
 GLuint VL_RBO;
+GLuint shadow_cubeMap_FBO;
+GLuint pingpongFBO[2];
+GLuint pingpongRBO[2];
 
 // identifiant du (futur) identifiant de texture
 static GLuint tex_cube_map = 0;
@@ -72,16 +76,20 @@ static GLuint tex_depth_particle = 0;
 static GLuint tex_pre_rendu_feu2 = 0;
 static GLuint tex_depth_feu2 = 0; 
 static GLuint tex_depth_particle2 = 0;
+static GLuint reflection_cubeMap = 0;
 static GLuint tex_depth_house = 0;
 static GLuint tex_color_VL = 0;
+static GLuint tex_shadow_cubeMap;
+static GLuint pingpongColorbuffers[2];
 
-
-float depth_map_res_seed = /*2048.0*/ 1024;
+float depth_map_res_seed = /*2048.0*/ 1024.0;
 float depth_map_res_x, depth_map_res_y, depth_map_res_x_house, depth_map_res_y_house;
-static GLuint reflection_cubeMap = 0;
-float reflection_cubeMap_res = /*2048.0*/ 1024;
+
+float reflection_cubeMap_res = /*2048.0*/ 512;
 float tex_VL_res_seed = 1024;
 float tex_VL_res_x, tex_VL_res_y;
+
+
 
 //dimension fenetre SDL
 static int w = 800 * 1.5;
@@ -146,6 +154,9 @@ float fog_End = 5.0f;
 glm::vec4 fog_color = glm::vec4(0.3f, 0.3f, 0.3f, 1.0f);
 float fog_equation = 2.0; 
 
+// VL intensity
+static float VL_intensity = 0.0;
+static int shadow_point_light = 1;
 
 /////////////////////////////////////////////////////////
 
@@ -183,6 +194,7 @@ int main() {
     particule_shader.set_shader("../shaders/particule.vs", "../shaders/particule.fs");
     screen_shader.set_shader("../shaders/screen.vs", "../shaders/screen.fs");
     skinning_shader.set_shader("../shaders/skinning.vs", "../shaders/skinning.fs");
+    blur_shader.set_shader("../shaders/blur.vs", "../shaders/blur.fs");
 
 
     // Set texture samples
@@ -195,6 +207,7 @@ int main() {
     glUniform1i(glGetUniformLocation(basic_shader.Program, "reflection_cubeMap"), 5);
     glUniform1i(glGetUniformLocation(basic_shader.Program, "shadow_map1"), 6);
     glUniform1i(glGetUniformLocation(basic_shader.Program, "texture_metalness"), 7);
+    glUniform1i(glGetUniformLocation(basic_shader.Program, "shadow_cube_map"), 8);
     glUseProgram(0);
 
     skinning_shader.Use();
@@ -203,6 +216,7 @@ int main() {
     glUniform1i(glGetUniformLocation(skinning_shader.Program, "texture_normal1"), 2);
     glUniform1i(glGetUniformLocation(skinning_shader.Program, "reflection_cubeMap"), 5);
     glUniform1i(glGetUniformLocation(skinning_shader.Program, "shadow_map1"), 3);
+    glUniform1i(glGetUniformLocation(skinning_shader.Program, "shadow_cube_map"), 6);
     glUseProgram(0);
 
    
@@ -216,6 +230,11 @@ int main() {
     glUniform1i(glGetUniformLocation(particule_shader.Program, "depth_map_feu"), 1);
     glUniform1i(glGetUniformLocation(particule_shader.Program, "particles_pre_render"), 2);
     glUseProgram(0);
+
+    blur_shader.Use();
+    glUniform1i(glGetUniformLocation(blur_shader.Program, "image"), 0);
+    glUseProgram(0);
+    
 
 
     ///////////////// Load les models && les animations  
@@ -322,6 +341,8 @@ static void quit(void) {
     glDeleteTextures(1, &tex_depth_house);
   if(tex_color_VL)
     glDeleteTextures(1, &tex_color_VL);
+  if(tex_shadow_cubeMap)
+    glDeleteTextures(1, &tex_shadow_cubeMap);
 
 
 
@@ -514,6 +535,7 @@ glGenRenderbuffers(1, &reflection_cubeMap_RBO); // RBO du FBO
 glGenFramebuffers(1, &house_depth_FBO);
 glGenFramebuffers(1, &VL_FBO);
 glGenRenderbuffers(1, &VL_RBO); // RBO du FBO
+glGenFramebuffers(1, &shadow_cubeMap_FBO);
 
 
 //////////////////////////////
@@ -829,14 +851,14 @@ glBindTexture(GL_TEXTURE_2D, 0);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glBindTexture(GL_TEXTURE_2D, 0);
 
-  // TEX COLOR VL
+  ///////////// TEX COLOR VL
   tex_VL_res_x = tex_VL_res_seed;  
   tex_VL_res_y = tex_VL_res_x * ((float)h/(float)w);
 
   glGenTextures(1, &tex_color_VL);
   glBindTexture(GL_TEXTURE_2D, tex_color_VL);
  
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex_VL_res_x, tex_VL_res_y, 0, GL_RGBA, GL_FLOAT, NULL);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, reflection_cubeMap_res, reflection_cubeMap_res, 0, GL_RGBA, GL_FLOAT, NULL);
    
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -847,7 +869,7 @@ glBindTexture(GL_TEXTURE_2D, 0);
   // RBO & FBO attach
   glBindFramebuffer(GL_FRAMEBUFFER, VL_FBO);
   glBindRenderbuffer(GL_RENDERBUFFER, VL_RBO);
-  glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, tex_VL_res_x, tex_VL_res_y);
+  glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, reflection_cubeMap_res, reflection_cubeMap_res);
   glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, VL_RBO);
   glBindRenderbuffer(GL_RENDERBUFFER, 0);
   
@@ -859,7 +881,105 @@ glBindTexture(GL_TEXTURE_2D, 0);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glBindTexture(GL_TEXTURE_2D, 0);
 
+  ///// TEX SHADOW CUBEMAP
+  glGenTextures(1, &tex_shadow_cubeMap);
+  glBindTexture(GL_TEXTURE_CUBE_MAP, tex_shadow_cubeMap);
+  for (int i = 0; i < 6; ++i)
+    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_DEPTH_COMPONENT, reflection_cubeMap_res * 2.0, reflection_cubeMap_res * 2.0, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
   
+  Status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+  if (Status != GL_FRAMEBUFFER_COMPLETE) {
+    printf("FBO BUUUG, status: 0x%x\n", Status);
+  } 
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+
+  // TEX & FBO PING PONG 1
+  glGenFramebuffers(1, &pingpongFBO[0]);
+  glGenRenderbuffers(1, &pingpongRBO[0]); // RBO du FBO
+  glGenTextures(1, &pingpongColorbuffers[0]);
+  
+  //glGenFramebuffers(2, pingpongFBO);
+  //glGenRenderbuffers(2, pingpongRBO);
+  //glGenTextures(2, pingpongColorbuffers);
+  //for (GLuint i = 0; i < 2; i++){
+    glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[0]);
+    glBindTexture(GL_TEXTURE_2D, pingpongColorbuffers[0]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, reflection_cubeMap_res, reflection_cubeMap_res, 0, GL_RGBA, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); 
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, pingpongColorbuffers[0], 0);
+    // Also check if framebuffers are complete (no need for depth buffer)
+ 
+    glBindRenderbuffer(GL_RENDERBUFFER, pingpongRBO[0]);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, reflection_cubeMap_res, reflection_cubeMap_res);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, pingpongRBO[0]);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+      std::cout << "Framebuffer not complete!" << std::endl;
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  
+  //}
+
+  // TEX & FBO PING PONG 2
+    glGenFramebuffers(1, &pingpongFBO[1]);
+  glGenRenderbuffers(1, &pingpongRBO[1]); // RBO du FBO
+  glGenTextures(1, &pingpongColorbuffers[1]);
+  
+  //glGenFramebuffers(2, pingpongFBO);
+  //glGenRenderbuffers(2, pingpongRBO);
+  //glGenTextures(2, pingpongColorbuffers);
+  //for (GLuint i = 0; i < 2; i++){
+    glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[1]);
+    glBindTexture(GL_TEXTURE_2D, pingpongColorbuffers[1]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, reflection_cubeMap_res, reflection_cubeMap_res, 0, GL_RGBA, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); 
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, pingpongColorbuffers[1], 0);
+    // Also check if framebuffers are complete (no need for depth buffer)
+ 
+    glBindRenderbuffer(GL_RENDERBUFFER, pingpongRBO[1]);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, reflection_cubeMap_res, reflection_cubeMap_res);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, pingpongRBO[1]);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+      std::cout << "Framebuffer not complete!" << std::endl;
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  
+  //}
+  
+  // OLD PING PONG INIT
+  /*glGenFramebuffers(2, pingpongFBO);
+  glGenRenderbuffers(2, pingpongRBO);
+  glGenTextures(2, pingpongColorbuffers);
+  for (GLuint i = 0; i < 2; i++)
+  {
+    glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[i]);
+    glBindTexture(GL_TEXTURE_2D, pingpongColorbuffers[i]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, reflection_cubeMap_res, reflection_cubeMap_res, 0, GL_RGBA, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); 
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, pingpongColorbuffers[i], 0);
+    // Also check if framebuffers are complete (no need for depth buffer)
+ 
+    glBindRenderbuffer(GL_RENDERBUFFER, pingpongRBO[i]);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, reflection_cubeMap_res, reflection_cubeMap_res);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, pingpongRBO[i]);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+      std::cout << "Framebuffer not complete!" << std::endl;
+    //glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    //glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  
+  }*/
 
 //////////////////////////////
 // LIGHT INIT
@@ -875,10 +995,10 @@ lights[0].lightSpecularColor*= 3.0;
 // fire
 lights[1].lightColor = glm::vec3(255.0/255.0, (/*147.0*/(197)/255.0), ((143)/255.0));
 lights[1].lightSpecularColor = glm::vec3(/*1.0,1.0,1.0*/ 255.0/255.0, ((200.0)/255.0), ((180.0)/255.0)) * 1.0f;
-lights[1].lightPos = glm::vec3(particules_pos.x,particules_pos.y + 0.08f,particules_pos.z);
+lights[1].lightPos = glm::vec3(particules_pos.x,particules_pos.y + 0.11f,particules_pos.z);
 lights[1].save_lightPos = lights[1].lightPos;
 
-// fake light pos pour shadow house;
+// fake light pos use for shadow house && VL;
 lights[2].lightPos = glm::vec3(-0.0680922, 11.9514, -5.3171);
 
 // OBJECTS INIT
@@ -938,7 +1058,7 @@ ground->shadow_darkness = 0.65;
   
  paladin.AmbientStr = 0.25;
  paladin.DiffuseStr = 0.8;
- paladin.SpecularStr = 0.3;
+ paladin.SpecularStr = 0.2;
  paladin.ShiniStr = 256.0; // 4 8 16 ... 256 
  paladin.angle = 3.635;
  paladin.acca=0.105;
@@ -1139,12 +1259,12 @@ ground->shadow_darkness = 0.65;
     //printf("2cameraX = %f, cameraY = %f, cameraZ = %f\n",cameraFront.x,cameraFront.y, cameraFront.z);
     //printf("yaw = %f, pitch = %f\n", yaw, pitch); 
 
-    //printf("lightX = %f, Y = %f, Z = %f\n",lightPos.x, lightPos.y, lightPos.z);
+    //printf("lightX = %f, Y = %f, Z = %f\n", lights[1].lightPos.x,  lights[1].lightPos.y,  lights[1].lightPos.z);
    
-    lights[1].lightPos = glm::vec3(particules_pos.x,particules_pos.y + 0.08f,particules_pos.z);
-    Feu.x=particules_pos.x;
-    Feu.y= Feu.y= particules_pos.y - 0.11;
-    Feu.z=particules_pos.z;
+    //lights[1].lightPos = glm::vec3(particules_pos.x,particules_pos.y + 0.08f,particules_pos.z);
+    Feu.x = particules_pos.x;
+    Feu.y = particules_pos.y - 0.11;
+    Feu.z = particules_pos.z;
 
     }
 
@@ -1170,7 +1290,7 @@ ground->shadow_darkness = 0.65;
 
 
   if(fly_state == true)
-    camera_speed = walk_speed*50;
+    camera_speed = walk_speed*5;
 
   //printf("camera_speed = %f\n", camera_speed);
 
@@ -1363,15 +1483,21 @@ while(SDL_PollEvent(&event))
      break;
 
      case 'a' :
-     trees[0].x += 0.1;
+     VL_intensity += 0.01;
+     std::cout << "VL_intensity = " <<  VL_intensity << std::endl;
      break;
 
      case 'e' :
-     trees[0].x -= 0.1;
+     VL_intensity -= 0.01;
+     std::cout << "VL_intensity = " <<  VL_intensity << std::endl;
      break;
 
      case 't' :
-     trees[0].z += 0.2;
+     if(shadow_point_light == 1){
+      shadow_point_light = 0;
+     }else{
+      shadow_point_light = 1;
+     }
      break;
 
      case 'y' :
@@ -1554,21 +1680,22 @@ static void draw() {
   viewMatrix=glm::lookAt(cameraPos, (cameraPos) + cameraFront, cameraUp); 
 
 
-  
  ////////////////////////////
    
 
  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); 
 
 
+
+
  //DRAW SCREEN
  screen_shader.Use();
  glActiveTexture(GL_TEXTURE0);
- glBindTexture(GL_TEXTURE_2D, tex_color_VL);
+ glBindTexture(GL_TEXTURE_2D, pingpongColorbuffers[0]);
 
  glBindVertexArray(screenVAO);
 
- glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+ //glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
  glBindVertexArray(0);
  glUseProgram(0);
@@ -1577,19 +1704,25 @@ static void draw() {
 
  // pre rendu feu
  glViewport(0, 0, depth_map_res_x, depth_map_res_y);
- //Pre_rendu_feu(projectionM2, viewMatrix, -1.0f);
+ Pre_rendu_feu(projectionM2, viewMatrix, -1.0f);
  
  //pre rendu reflection cube map
  glViewport(0, 0, reflection_cubeMap_res, reflection_cubeMap_res);
- //Pre_rendu_cubeMap();
+ Pre_rendu_cubeMap();
 
  //pre rendu shadow
  glViewport(0, 0, depth_map_res_x_house, depth_map_res_y_house);
  Pre_rendu_shadow_house(projectionM3, viewMatrix);
 
- // rendu scene pour la VL
- glViewport(0, 0, tex_VL_res_x, tex_VL_res_y);
- RenderShadowedObjects(true);
+ // pre rendu scene pour la VL
+ /*glViewport(0, 0, tex_VL_res_x, tex_VL_res_y);
+ RenderShadowedObjects(true);*/
+
+ // pre rendu shadow cubemap
+ if(shadow_point_light == 1){
+   glViewport(0, 0, reflection_cubeMap_res * 2.0, reflection_cubeMap_res * 2.0);
+   Pre_rendu_shadow_cubeMap();
+ }
 
  // rendu scene normal        
  glViewport(0, 0, w, h);
@@ -1714,12 +1847,10 @@ void Pre_rendu_feu(glm::mat4 projectionMatrix, glm::mat4 viewMatrix, float face_
 void Pre_rendu_cubeMap(){
 
   
-  int face = 0;
-  glm::mat4 projectionM,projectionM2,Msend;
+  glm::mat4 projectionM,Msend;
 
   std::vector<glm::mat4> cubeMap_viewMatrices;
   projectionM = glm::perspective(89.5373f, (float)reflection_cubeMap_res/(float)reflection_cubeMap_res, 0.1f, 1000.0f);
-  projectionM2 = glm::perspective(45.0f, (float)reflection_cubeMap_res/(float)reflection_cubeMap_res, 0.1f, 1000.0f);
   glm::vec3 paladin_pos = glm::vec3(paladin.x,paladin.y+0.45,paladin.z);
  
   
@@ -1739,24 +1870,23 @@ void Pre_rendu_cubeMap(){
   cubeMap_viewMatrices.push_back(glm::lookAt(glm::vec3(paladin_pos), glm::vec3(paladin_pos) + glm::vec3( 0.0,  0.0,  1.0), glm::vec3(0.0, -1.0, 0.0)));
   cubeMap_viewMatrices.push_back(glm::lookAt(glm::vec3(paladin_pos), glm::vec3(paladin_pos) + glm::vec3( 0.0,  0.0, -1.0), glm::vec3(0.0, -1.0, 0.0)));
 
-
-
-  glBindFramebuffer(GL_FRAMEBUFFER, reflection_cubeMap_FBO);
   
 
   for (int i = 0; i < 6; ++i){
    
     glBindFramebuffer(GL_FRAMEBUFFER, 0);      
-    //glViewport(0, 0, depth_map_res_x, depth_map_res_y);
+    
     if(i == 5){
       Pre_rendu_feu(projectionM, cubeMap_viewMatrices[i], i);
     }
-    //glViewport(0, 0, reflection_cubeMap_res, reflection_cubeMap_res);
+
     glBindFramebuffer(GL_FRAMEBUFFER, reflection_cubeMap_FBO);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i , reflection_cubeMap, 0);
-
-
-    //glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i , reflection_cubeMap, 0);
+    
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);      
+   
+    glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[0]);
+   
    
 
     /*if(i == 5){
@@ -1845,67 +1975,15 @@ void Pre_rendu_cubeMap(){
       glUniform1f(glGetUniformLocation(basic_shader.Program, "depth_test"), 0.0);    
       glUniform1f(glGetUniformLocation(basic_shader.Program, "face_cube"), i);    
 
-
+      glEnable(GL_CULL_FACE);
+      glCullFace(GL_BACK);
       feu_model.Draw(basic_shader, glm::mat4(1.0), false);
+      glDisable(GL_CULL_FACE);
+      
 
       glBindVertexArray(0);
       glUseProgram(0);
     }
-
-    // DRAW House
-    /*basic_shader.Use();
-
-    Msend = glm::mat4();
-
-    Msend = glm::translate(Msend, glm::vec3(house.x,house.y,house.z));
-    Msend = glm::rotate(Msend, house.angle, glm::vec3(0.0, 1.0 , 0.0));
-    Msend = glm::scale(Msend, glm::vec3(house.scale)); 
-
-
-    glUniformMatrix4fv(glGetUniformLocation(basic_shader.Program, ("cubeMap_viewMatrices[" + std::to_string(i) + "]").c_str()), 1, GL_FALSE, glm::value_ptr(cubeMap_viewMatrices[i]));            
-    glUniformMatrix4fv(glGetUniformLocation(basic_shader.Program, "modelViewMatrix"), 1, GL_FALSE, glm::value_ptr(Msend));
-    glUniformMatrix4fv(glGetUniformLocation(basic_shader.Program, "projectionMatrix"), 1, GL_FALSE, glm::value_ptr(projectionM));
-
-
-    glUniform3fv(glGetUniformLocation(basic_shader.Program, "LightPos[0]"),1, &lights[0].lightPos[0]);
-    glUniform3fv(glGetUniformLocation(basic_shader.Program, "LightColor[0]"),1, &lights[0].lightColor[0]);
-    glUniform3fv(glGetUniformLocation(basic_shader.Program, "LightSpecularColor[0]"),1, &lights[0].lightSpecularColor[0]);
-    glUniform1f(glGetUniformLocation(basic_shader.Program, "constant[0]"),1.0f);
-    glUniform1f(glGetUniformLocation(basic_shader.Program, "linear[0]"),  0.007);
-    glUniform1f(glGetUniformLocation(basic_shader.Program, "quadratic[0]"), 0.0002);
- 
-
-    glUniform3fv(glGetUniformLocation(basic_shader.Program, "LightPos[1]"),1, &lights[1].lightPos[0]);
-    glUniform3fv(glGetUniformLocation(basic_shader.Program, "LightColor[1]"),1, &lights[1].lightColor[0]);
-    glUniform3fv(glGetUniformLocation(basic_shader.Program, "LightSpecularColor[1]"),1, &lights[1].lightSpecularColor[0]);
-    glUniform1f(glGetUniformLocation(basic_shader.Program, "constant[1]"),1.0f);
-    glUniform1f(glGetUniformLocation(basic_shader.Program, "linear[1]"),  0.5);
-    glUniform1f(glGetUniformLocation(basic_shader.Program, "quadratic[1]"), 0.9);
-    glUniform1f(glGetUniformLocation(basic_shader.Program, "fire_intensity"), fire_intensity);
-
-
-    glUniform1f(glGetUniformLocation(basic_shader.Program, "ambientSTR"), house.AmbientStr);
-    glUniform1f(glGetUniformLocation(basic_shader.Program, "diffuseSTR"), house.DiffuseStr);
-    glUniform1f(glGetUniformLocation(basic_shader.Program, "specularSTR"), house.SpecularStr);
-    glUniform1f(glGetUniformLocation(basic_shader.Program, "ShiniSTR"), house.ShiniStr);
-   
-    glUniform3fv(glGetUniformLocation(basic_shader.Program, "viewPos"), 1, &cameraPos[0]);
-
-    glUniform1f(glGetUniformLocation(basic_shader.Program, "alpha"), house.alpha);
-    glUniform1f(glGetUniformLocation(basic_shader.Program, "var"), house.var);    
-    glUniform1f(glGetUniformLocation(basic_shader.Program, "depth_test"), 0.0);    
-    glUniform1f(glGetUniformLocation(basic_shader.Program, "face_cube"), i);     
-  
-
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
-    house_model.Draw(basic_shader, glm::mat4(1.0), false);
-    glDisable(GL_CULL_FACE);
-    
-
-    glBindVertexArray(0);
-    glUseProgram(0);
-*/
 
 
     
@@ -1941,7 +2019,56 @@ void Pre_rendu_cubeMap(){
     }
 
 
+    if(/*i == 5*/ true){
+
+      glBindFramebuffer(GL_FRAMEBUFFER, 0);      
+
+    // BLURING
+      int horizontal = 1; 
+      bool first_iteration = true;
+      GLuint amount = 6;
+      blur_shader.Use();
+      for (GLuint i = 0; i < amount; i++)
+      {
+     
+     //std::cout << "horizontal = " << horizontal << std::endl;
+       glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[horizontal]); 
+       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+     
+     
+       if(horizontal == 0){
+        horizontal = 1;
+       }else{ horizontal = 0; }
+     
+       glActiveTexture(GL_TEXTURE0);
+       glBindTexture(GL_TEXTURE_2D, pingpongColorbuffers[horizontal]);  // bind texture of other framebuffer (or scene if first iteration)
+     
+      //glUniform1f(glGetUniformLocation(blur_shader.Program, "horizontal"), horizontal);
+
+       RenderQuad();
+       glBindFramebuffer(GL_FRAMEBUFFER, 0);     
+    
+     
+
+     }
+     glUseProgram(0);
+
+     glBindFramebuffer(GL_READ_FRAMEBUFFER, pingpongFBO[0]); 
+     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, reflection_cubeMap_FBO);
+     //glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i , reflection_cubeMap, 0);
+    
+
+     glBlitFramebuffer(0, 0, reflection_cubeMap_res, reflection_cubeMap_res,             
+                  0, 0, reflection_cubeMap_res, reflection_cubeMap_res,             
+                  GL_COLOR_BUFFER_BIT,             
+                  GL_LINEAR);    
+
+
+    }
+
+
   }
+ 
 
   ////////////////////////
   
@@ -1959,6 +2086,7 @@ void Pre_rendu_shadow_house(glm::mat4 projectionMatrix, glm::mat4 viewMatrix){
   static int test = 0;
 
   if(test == 0){
+
 
     test = 1;
   // DRAW DEPTH HOUSE     
@@ -1982,32 +2110,10 @@ void Pre_rendu_shadow_house(glm::mat4 projectionMatrix, glm::mat4 viewMatrix){
     Msend = glm::rotate(Msend, house.angle, glm::vec3(0.0, 1.0 , 0.0));
     Msend = glm::scale(Msend, glm::vec3(house.scale)); 
 
-    glUniformMatrix4fv(glGetUniformLocation(basic_shader.Program, "viewMatrix"), 1, GL_FALSE, glm::value_ptr(/*viewMatrix*/ lightView));
+    glUniformMatrix4fv(glGetUniformLocation(basic_shader.Program, "viewMatrix"), 1, GL_FALSE, glm::value_ptr(lightView));
     glUniformMatrix4fv(glGetUniformLocation(basic_shader.Program, "modelViewMatrix"), 1, GL_FALSE, glm::value_ptr(Msend));
-    glUniformMatrix4fv(glGetUniformLocation(basic_shader.Program, "projectionMatrix"), 1, GL_FALSE, glm::value_ptr(/*projectionMatrix*/ lightProjection));
+    glUniformMatrix4fv(glGetUniformLocation(basic_shader.Program, "projectionMatrix"), 1, GL_FALSE, glm::value_ptr(lightProjection));
 
- /* glUniform3fv(glGetUniformLocation(basic_shader.Program, "LightPos[0]"),1, &lights[0].lightPos[0]);
-  glUniform3fv(glGetUniformLocation(basic_shader.Program, "LightColor[0]"),1, &lights[0].lightColor[0]);
-  glUniform3fv(glGetUniformLocation(basic_shader.Program, "LightSpecularColor[0]"),1, &lights[0].lightSpecularColor[0]);
-  glUniform1f(glGetUniformLocation(basic_shader.Program, "constant[0]"),1.0f);
-  glUniform1f(glGetUniformLocation(basic_shader.Program, "linear[0]"),  0.007);
-  glUniform1f(glGetUniformLocation(basic_shader.Program, "quadratic[0]"), 0.0002);
-
-
-  glUniform3fv(glGetUniformLocation(basic_shader.Program, "LightPos[1]"),1, &lights[1].lightPos[0]);
-  glUniform3fv(glGetUniformLocation(basic_shader.Program, "LightColor[1]"),1, &lights[1].lightColor[0]);
-  glUniform3fv(glGetUniformLocation(basic_shader.Program, "LightSpecularColor[1]"),1, &lights[1].lightSpecularColor[0]);
-  glUniform1f(glGetUniformLocation(basic_shader.Program, "constant[1]"),1.0f);
-  glUniform1f(glGetUniformLocation(basic_shader.Program, "linear[1]"),  0.7);
-  glUniform1f(glGetUniformLocation(basic_shader.Program, "quadratic[1]"), 1.8);
-  glUniform1f(glGetUniformLocation(basic_shader.Program, "fire_intensity"), fire_intensity);
-
-
-  glUniform1f(glGetUniformLocation(basic_shader.Program, "ambientSTR"), house.AmbientStr);
-  glUniform1f(glGetUniformLocation(basic_shader.Program, "diffuseSTR"), house.DiffuseStr);
-  glUniform1f(glGetUniformLocation(basic_shader.Program, "specularSTR"), house.SpecularStr);
-  glUniform1f(glGetUniformLocation(basic_shader.Program, "ShiniSTR"), house.ShiniStr);*/
- 
     glUniform3fv(glGetUniformLocation(basic_shader.Program, "viewPos"), 1, &cameraPos[0]);
 
     glUniform1f(glGetUniformLocation(basic_shader.Program, "alpha"), house.alpha);
@@ -2036,63 +2142,196 @@ void Pre_rendu_shadow_house(glm::mat4 projectionMatrix, glm::mat4 viewMatrix){
     glUniformMatrix4fv(glGetUniformLocation(basic_shader.Program, "viewMatrix"), 1, GL_FALSE, glm::value_ptr(lightView));
     glUniformMatrix4fv(glGetUniformLocation(basic_shader.Program, "modelViewMatrix"), 1, GL_FALSE, glm::value_ptr(Msend));
     glUniformMatrix4fv(glGetUniformLocation(basic_shader.Program, "projectionMatrix"), 1, GL_FALSE, glm::value_ptr(lightProjection));
- //glUniformMatrix4fv(glGetUniformLocation(basic_shader.Program, "lightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(light_space_matrix));
- //glUniform1f(glGetUniformLocation(basic_shader.Program, "send_bias"), send_bias);
 
+    glUniform3fv(glGetUniformLocation(basic_shader.Program, "viewPos"), 1, &cameraPos[0]);
 
-/*    glUniform3fv(glGetUniformLocation(basic_shader.Program, "LightPos[0]"),1, &lights[0].lightPos[0]);
-    glUniform3fv(glGetUniformLocation(basic_shader.Program, "LightColor[0]"),1, &lights[0].lightColor[0]);
-    glUniform3fv(glGetUniformLocation(basic_shader.Program, "LightSpecularColor[0]"),1, &lights[0].lightSpecularColor[0]);
-    glUniform1f(glGetUniformLocation(basic_shader.Program, "constant[0]"),1.0f);
-    glUniform1f(glGetUniformLocation(basic_shader.Program, "linear[0]"),  0.007);
-    glUniform1f(glGetUniformLocation(basic_shader.Program, "quadratic[0]"), 0.0002);
- 
+    glUniform1f(glGetUniformLocation(basic_shader.Program, "alpha"), sword.alpha);
+    glUniform1f(glGetUniformLocation(basic_shader.Program, "var"), sword.var);    
+    glUniform1f(glGetUniformLocation(basic_shader.Program, "depth_test"), 1.0);    
+    glUniform1f(glGetUniformLocation(basic_shader.Program, "face_cube"), -1.0);     
 
- glUniform3fv(glGetUniformLocation(basic_shader.Program, "LightPos[1]"),1, &lights[1].lightPos[0]);
- glUniform3fv(glGetUniformLocation(basic_shader.Program, "LightColor[1]"),1, &lights[1].lightColor[0]);
- glUniform3fv(glGetUniformLocation(basic_shader.Program, "LightSpecularColor[1]"),1, &lights[1].lightSpecularColor[0]);
- glUniform1f(glGetUniformLocation(basic_shader.Program, "constant[1]"),1.0f);
- glUniform1f(glGetUniformLocation(basic_shader.Program, "linear[1]"),  0.5);
- glUniform1f(glGetUniformLocation(basic_shader.Program, "quadratic[1]"), 0.9);
- glUniform1f(glGetUniformLocation(basic_shader.Program, "fire_intensity"), fire_intensity);
-
-
- glUniform1f(glGetUniformLocation(basic_shader.Program, "ambientSTR"), sword.AmbientStr);
- glUniform1f(glGetUniformLocation(basic_shader.Program, "diffuseSTR"), sword.DiffuseStr);
- glUniform1f(glGetUniformLocation(basic_shader.Program, "specularSTR"), sword.SpecularStr);
- glUniform1f(glGetUniformLocation(basic_shader.Program, "ShiniSTR"), sword.ShiniStr);
- glUniform1f(glGetUniformLocation(basic_shader.Program, "shadow_darkness"), sword.shadow_darkness);*/
- 
- glUniform3fv(glGetUniformLocation(basic_shader.Program, "viewPos"), 1, &cameraPos[0]);
-
- glUniform1f(glGetUniformLocation(basic_shader.Program, "alpha"), sword.alpha);
- glUniform1f(glGetUniformLocation(basic_shader.Program, "var"), sword.var);    
- glUniform1f(glGetUniformLocation(basic_shader.Program, "depth_test"), 1.0);    
- glUniform1f(glGetUniformLocation(basic_shader.Program, "face_cube"), -1.0);     
-
- /*glUniform4fv(glGetUniformLocation(basic_shader.Program, "fog_color"),1, &fog_color[0]);
- glUniform1f(glGetUniformLocation(basic_shader.Program, "fog_density"), fog_density);
- glUniform1f(glGetUniformLocation(basic_shader.Program, "fog_equation"), fog_equation);
- glUniform3fv(glGetUniformLocation(basic_shader.Program, "mid_fog_position"), 1, &mid_fog_position[0]);*/
-
-  
-  //glEnable(GL_CULL_FACE);
-  //glCullFace(GL_BACK);
- sword_model.Draw(basic_shader, glm::mat4(1.0), false);
-  //glDisable(GL_CULL_FACE);
+    sword_model.Draw(basic_shader, glm::mat4(1.0), false);
     
 
- glBindVertexArray(0);
- glUseProgram(0);
+    glBindVertexArray(0);
+    glUseProgram(0);
 
- glBindFramebuffer(GL_FRAMEBUFFER, 0);   
-
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);   
 
 
   }
 
 }
 
+void Pre_rendu_shadow_cubeMap(){
+
+  glm::mat4 projectionM,Msend;
+
+  std::vector<glm::mat4> cubeMap_viewMatrices;
+  projectionM = glm::perspective(89.5373f, (float)reflection_cubeMap_res/(float)reflection_cubeMap_res, 0.12f, 1000.0f);
+  
+  
+  /////////////
+  
+  cubeMap_viewMatrices.push_back(glm::lookAt(glm::vec3(lights[1].lightPos), glm::vec3(lights[1].lightPos) + glm::vec3( 1.0,  0.0,  0.0), glm::vec3(0.0, -1.0, 0.0)));
+  cubeMap_viewMatrices.push_back(glm::lookAt(glm::vec3(lights[1].lightPos), glm::vec3(lights[1].lightPos) + glm::vec3(-1.0,  0.0,  0.0), glm::vec3(0.0, -1.0, 0.0)));
+  cubeMap_viewMatrices.push_back(glm::lookAt(glm::vec3(lights[1].lightPos), glm::vec3(lights[1].lightPos) + glm::vec3( 0.0,  1.0,  0.0), glm::vec3(0.0, 0.0, 1.0)));
+  cubeMap_viewMatrices.push_back(glm::lookAt(glm::vec3(lights[1].lightPos), glm::vec3(lights[1].lightPos) + glm::vec3( 0.0, -1.0,  0.0), glm::vec3(0.0, 0.0, -1.0)));
+  cubeMap_viewMatrices.push_back(glm::lookAt(glm::vec3(lights[1].lightPos), glm::vec3(lights[1].lightPos) + glm::vec3( 0.0,  0.0,  1.0), glm::vec3(0.0, -1.0, 0.0)));
+  cubeMap_viewMatrices.push_back(glm::lookAt(glm::vec3(lights[1].lightPos), glm::vec3(lights[1].lightPos) + glm::vec3( 0.0,  0.0, -1.0), glm::vec3(0.0, -1.0, 0.0)));
+
+
+  for (int i = 0; i < 6; ++i){
+   
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);      
+    
+    glBindFramebuffer(GL_FRAMEBUFFER, shadow_cubeMap_FBO);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i , tex_shadow_cubeMap, 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+
+    // DRAW FEU DE CAMP
+    if(i != 2){
+      basic_shader.Use();
+
+      Msend = glm::mat4();
+
+      Msend = glm::translate(Msend, glm::vec3(Feu.x,Feu.y,Feu.z));
+      Msend = glm::rotate(Msend, (float)myPI_2, glm::vec3(-1.0, 0.0 , 0.0));
+      Msend = glm::scale(Msend, glm::vec3(Feu.scale)); 
+
+      glUniformMatrix4fv(glGetUniformLocation(basic_shader.Program, ("cubeMap_viewMatrices[" + std::to_string(i) + "]").c_str()), 1, GL_FALSE, glm::value_ptr(cubeMap_viewMatrices[i]));            
+      glUniformMatrix4fv(glGetUniformLocation(basic_shader.Program, "modelViewMatrix"), 1, GL_FALSE, glm::value_ptr(Msend));
+      glUniformMatrix4fv(glGetUniformLocation(basic_shader.Program, "projectionMatrix"), 1, GL_FALSE, glm::value_ptr(projectionM));
+
+      glUniform3fv(glGetUniformLocation(basic_shader.Program, "viewPos"), 1, &lights[1].lightPos[0]);
+
+      glUniform1f(glGetUniformLocation(basic_shader.Program, "alpha"), Feu.alpha);
+      glUniform1f(glGetUniformLocation(basic_shader.Program, "var"), Feu.var);    
+      glUniform1f(glGetUniformLocation(basic_shader.Program, "depth_test"), 1.0);    
+      glUniform1f(glGetUniformLocation(basic_shader.Program, "face_cube"), i);    
+
+      glEnable(GL_CULL_FACE);
+      glCullFace(GL_BACK); 
+      feu_model.Draw(basic_shader, glm::mat4(1.0), false);
+      glDisable(GL_CULL_FACE);
+
+      glBindVertexArray(0);
+      glUseProgram(0);
+    }
+
+    // DRAW SKINNED PALADIN
+    if(i ==  0 || i == 4){
+      skinning_shader.Use();
+
+      for (uint i = 0 ; i < Transforms.size() ; i++) {
+        SetBoneTransform(i, Transforms[i],1);
+      }
+
+      Msend = glm::mat4();
+
+      Msend = glm::translate(Msend, glm::vec3(paladin.x,paladin.y,paladin.z));
+      Msend = glm::rotate(Msend, paladin.angle, glm::vec3(0.0 , 1.0 , 0.0));
+      Msend = glm::rotate(Msend, paladin.acca, glm::vec3(1.0 , 0.0 , 0.0));
+      Msend = glm::scale(Msend, glm::vec3(paladin.scale)); 
+
+
+      glUniformMatrix4fv(glGetUniformLocation(skinning_shader.Program, ("cubeMap_viewMatrices[" + std::to_string(i) + "]").c_str()), 1, GL_FALSE, glm::value_ptr(cubeMap_viewMatrices[i]));            
+      glUniformMatrix4fv(glGetUniformLocation(skinning_shader.Program, "modelViewMatrix"), 1, GL_FALSE, glm::value_ptr(Msend));
+      glUniformMatrix4fv(glGetUniformLocation(skinning_shader.Program, "projectionMatrix"), 1, GL_FALSE, glm::value_ptr(projectionM));
+
+      glUniform3fv(glGetUniformLocation(skinning_shader.Program, "viewPos"), 1, &lights[1].lightPos[0]);
+
+      glUniform1f(glGetUniformLocation(skinning_shader.Program, "alpha"), paladin.alpha);
+      glUniform1f(glGetUniformLocation(skinning_shader.Program, "var"), paladin.var);    
+      glUniform1f(glGetUniformLocation(skinning_shader.Program, "depth_test"), 1.0);   
+      glUniform1f(glGetUniformLocation(skinning_shader.Program, "face_cube"), i);     
+
+
+      glEnable(GL_CULL_FACE);
+      glCullFace(GL_BACK); 
+      paladin_skinned.Render(); 
+      glDisable(GL_CULL_FACE);
+
+      glBindVertexArray(0);
+      glUseProgram(0);
+    }
+
+    // DRAW HOUSE
+    if(i != 1 || i != 3){
+      basic_shader.Use();
+
+      Msend = glm::mat4();
+
+      Msend = glm::translate(Msend, glm::vec3(house.x,house.y,house.z));
+      Msend = glm::rotate(Msend, house.angle, glm::vec3(0.0, 1.0 , 0.0));
+      Msend = glm::scale(Msend, glm::vec3(house.scale)); 
+
+      glUniformMatrix4fv(glGetUniformLocation(basic_shader.Program, ("cubeMap_viewMatrices[" + std::to_string(i) + "]").c_str()), 1, GL_FALSE, glm::value_ptr(cubeMap_viewMatrices[i])); 
+      glUniformMatrix4fv(glGetUniformLocation(basic_shader.Program, "modelViewMatrix"), 1, GL_FALSE, glm::value_ptr(Msend));
+      glUniformMatrix4fv(glGetUniformLocation(basic_shader.Program, "projectionMatrix"), 1, GL_FALSE, glm::value_ptr(projectionM));
+
+      glUniform3fv(glGetUniformLocation(basic_shader.Program, "viewPos"), 1, &lights[1].lightPos[0]);
+
+      glUniform1f(glGetUniformLocation(basic_shader.Program, "alpha"), house.alpha);
+      glUniform1f(glGetUniformLocation(basic_shader.Program, "var"), house.var);    
+      glUniform1f(glGetUniformLocation(basic_shader.Program, "depth_test"), 1.0);    
+      glUniform1f(glGetUniformLocation(basic_shader.Program, "face_cube"), i);     
+
+
+      glEnable(GL_CULL_FACE);
+      glCullFace(GL_FRONT);
+      house_model.Draw(basic_shader, glm::mat4(1.0), true);
+      glDisable(GL_CULL_FACE);
+
+
+      glBindVertexArray(0);
+      glUseProgram(0);
+    }
+    // DRAW SHIELD
+    if(i == 5){
+      basic_shader.Use();
+
+      Msend = glm::mat4();
+      Msend = glm::translate(Msend, glm::vec3(shield.x,shield.y,shield.z));
+      Msend = glm::rotate(Msend, shield.angle, glm::vec3(0.0, 1.0 , 0.0));
+      Msend = glm::rotate(Msend, shield.angle*4.0f, glm::vec3(1.0, 0.0 , 0.0));
+
+      Msend = glm::scale(Msend, glm::vec3(shield.scale)); 
+
+      glUniformMatrix4fv(glGetUniformLocation(basic_shader.Program, ("cubeMap_viewMatrices[" + std::to_string(i) + "]").c_str()), 1, GL_FALSE, glm::value_ptr(cubeMap_viewMatrices[i])); 
+      glUniformMatrix4fv(glGetUniformLocation(basic_shader.Program, "modelViewMatrix"), 1, GL_FALSE, glm::value_ptr(Msend));
+      glUniformMatrix4fv(glGetUniformLocation(basic_shader.Program, "projectionMatrix"), 1, GL_FALSE, glm::value_ptr(projectionM));
+
+      glUniform3fv(glGetUniformLocation(basic_shader.Program, "viewPos"), 1, &lights[1].lightPos[0]);
+
+      glUniform1f(glGetUniformLocation(basic_shader.Program, "alpha"), shield.alpha);
+      glUniform1f(glGetUniformLocation(basic_shader.Program, "var"), shield.var);    
+      glUniform1f(glGetUniformLocation(basic_shader.Program, "depth_test"), 1.0);    
+      glUniform1f(glGetUniformLocation(basic_shader.Program, "face_cube"), i);     
+
+
+      glEnable(GL_CULL_FACE);
+      glCullFace(GL_FRONT);
+      shield_model.Draw(basic_shader, glm::mat4(1.0), false);
+      glDisable(GL_CULL_FACE);
+
+
+      glBindVertexArray(0);
+      glUseProgram(0);
+    }
+
+
+
+  }
+
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);      
+  glViewport(0, 0, w, h);
+  
+}
 
 void RenderShadowedObjects(bool VL_pre_rendering){
 
@@ -2136,7 +2375,8 @@ void RenderShadowedObjects(bool VL_pre_rendering){
 
  glUniform1f(glGetUniformLocation(skybox_shader.Program, "alpha"), skybox_alpha);
  glUniform1f(glGetUniformLocation(skybox_shader.Program, "is_foggy"), 1.0);
- glUniform1f(glGetUniformLocation(skybox_shader.Program, "is_volum_light"), 1.0); 
+ glUniform1f(glGetUniformLocation(skybox_shader.Program, "is_volum_light"), 1.0);
+ glUniform1f(glGetUniformLocation(skybox_shader.Program, "VL_intensity"), VL_intensity); 
  glUniform3fv(glGetUniformLocation(skybox_shader.Program, "viewPos"), 1, &cameraPos[0]);
  glUniformMatrix4fv(glGetUniformLocation(skybox_shader.Program, "lightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(light_space_matrix /*skybox_light_space_matrix*/)); 
  glUniform3fv(glGetUniformLocation(skybox_shader.Program, "LightPos[2]"),1, &lights[2].lightPos[0]);
@@ -2145,7 +2385,7 @@ void RenderShadowedObjects(bool VL_pre_rendering){
  glBindVertexArray(skyboxVAO);
  glActiveTexture(GL_TEXTURE0);
  glUniform1i(glGetUniformLocation(skybox_shader.Program, "skybox"), 0); // envoi du sampler cube 
- glBindTexture(GL_TEXTURE_CUBE_MAP, tex_cube_map /*reflection_cubeMap*/); // bind les 6 textures du cube map
+ glBindTexture(GL_TEXTURE_CUBE_MAP, tex_cube_map /*reflection_cubeMap*/ /*tex_shadow_cubeMap*/); // bind les 6 textures du cube map
  
  glActiveTexture(GL_TEXTURE1);
  glUniform1i(glGetUniformLocation(skybox_shader.Program, "shadow_map1"), 1);  
@@ -2160,8 +2400,9 @@ void RenderShadowedObjects(bool VL_pre_rendering){
  //glDepthMask(GL_TRUE);  // réactivé pour draw le reste
  glUseProgram(0);
 
+
   // DRAW LAMP
- /*lamp_shader.Use();
+ lamp_shader.Use();
  
  glBindVertexArray(lampVAO);
 
@@ -2176,10 +2417,10 @@ void RenderShadowedObjects(bool VL_pre_rendering){
  glUniformMatrix4fv(glGetUniformLocation(lamp_shader.Program, "projection"), 1, GL_FALSE, glm::value_ptr(projectionM));
  glUniform3f(glGetUniformLocation(lamp_shader.Program, "lampColor"), lampColor.x,lampColor.z,lampColor.z);
 
+ //glDrawArrays(GL_TRIANGLES, 0, nbVerticesSphere);
 
- glDrawArrays(GL_TRIANGLES, 0, nbVerticesSphere);
  glBindVertexArray(0);
- glUseProgram(0);*/
+ glUseProgram(0);
 
 
 
@@ -2243,12 +2484,11 @@ void RenderShadowedObjects(bool VL_pre_rendering){
  glUniform1f(glGetUniformLocation(basic_shader.Program, "face_cube"), -1.0);     
 
  glUniform4fv(glGetUniformLocation(basic_shader.Program, "fog_color"),1, &fog_color[0]);
-    /*glUniform1f(glGetUniformLocation(caillou_shader.Program, "fStart"), fog_Start);
-    glUniform1f(glGetUniformLocation(caillou_shader.Program, "fEnd"), fog_End);*/
  glUniform1f(glGetUniformLocation(basic_shader.Program, "fog_density"), fog_density);
  glUniform1f(glGetUniformLocation(basic_shader.Program, "fog_equation"), fog_equation);
  glUniform3fv(glGetUniformLocation(basic_shader.Program, "mid_fog_position"), 1, &mid_fog_position[0]);
  
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "VL_intensity"), VL_intensity);
   
  glEnable(GL_CULL_FACE);
  glCullFace(GL_FRONT);
@@ -2317,9 +2557,11 @@ void RenderShadowedObjects(bool VL_pre_rendering){
  glUniform1f(glGetUniformLocation(basic_shader.Program, "depth_test"), 0.0);    
  glUniform1f(glGetUniformLocation(basic_shader.Program, "face_cube"), -1.0);     
   
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "VL_intensity"), VL_intensity);
+
  glEnable(GL_CULL_FACE);
  glCullFace(GL_BACK); 
- //feu_model.Draw(basic_shader, Msend2, false);
+ feu_model.Draw(basic_shader, Msend2, false);
  glDisable(GL_CULL_FACE);
 
  glBindVertexArray(0);
@@ -2383,8 +2625,6 @@ void RenderShadowedObjects(bool VL_pre_rendering){
 //////////////////////// DRAW SKINNED PALADIN
 
 // CALCUL MATRICES BONES
- vector<glm::mat4> Transforms;
-
  float start_anim = 0.0;
 
 //printf("t = %f\n", zombie[0].t);
@@ -2401,7 +2641,7 @@ void RenderShadowedObjects(bool VL_pre_rendering){
   
   
   if(RunningTime1 >= 0.0 /*&& RunningTime1 <= 1000.0*/){
-    paladin_skinned.BoneTransform(RunningTime1, Transforms, /*paladin_sitting_idle*/ /*paladin_standing_up*/ /*paladin_breathing_idle*/ paladin_warrior_idle);
+    paladin_skinned.BoneTransform(RunningTime1, Transforms, paladin_sitting_idle /*paladin_standing_up*/ /*paladin_breathing_idle*/ /*paladin_warrior_idle*/);
   }
 
   /*if(RunningTime2 >= 0.0 && RunningTime2 < 4.6+6.7+(start_anim/1000.0)){
@@ -2425,10 +2665,17 @@ void RenderShadowedObjects(bool VL_pre_rendering){
 
  skinning_shader.Use();
 
+  for (uint i = 0 ; i < Transforms.size() ; i++) {
+  SetBoneTransform(i, Transforms[i],1);
+ }
+
+
  glActiveTexture(GL_TEXTURE5); 
  glBindTexture(GL_TEXTURE_CUBE_MAP, reflection_cubeMap);
  glActiveTexture(GL_TEXTURE3);
  glBindTexture(GL_TEXTURE_2D, tex_depth_house);
+ glActiveTexture(GL_TEXTURE6);
+ glBindTexture(GL_TEXTURE_CUBE_MAP, tex_shadow_cubeMap);
  
 
  Msend = glm::mat4();
@@ -2438,9 +2685,6 @@ void RenderShadowedObjects(bool VL_pre_rendering){
  Msend = glm::rotate(Msend, paladin.acca, glm::vec3(1.0 , 0.0 , 0.0));
  Msend = glm::scale(Msend, glm::vec3(paladin.scale)); 
 
- for (uint i = 0 ; i < Transforms.size() ; i++) {
-  SetBoneTransform(i, Transforms[i],1);
- }
 
  glUniformMatrix4fv(glGetUniformLocation(skinning_shader.Program, "viewMatrix"), 1, GL_FALSE, glm::value_ptr(viewMatrix));
  glUniformMatrix4fv(glGetUniformLocation(skinning_shader.Program, "modelViewMatrix"), 1, GL_FALSE, glm::value_ptr(Msend));
@@ -2456,6 +2700,7 @@ void RenderShadowedObjects(bool VL_pre_rendering){
  glUniform1f(glGetUniformLocation(skinning_shader.Program, "constant[0]"),1.0f);
  glUniform1f(glGetUniformLocation(skinning_shader.Program, "linear[0]"),  0.007*0.2);
  glUniform1f(glGetUniformLocation(skinning_shader.Program, "quadratic[0]"), 0.0002*0.2);
+ //glUniform1f(glGetUniformLocation(skinning_shader.Program, "test_bias"), test_bias);
  
 
  glUniform3fv(glGetUniformLocation(skinning_shader.Program, "LightPos[1]"),1, &lights[1].lightPos[0]);
@@ -2480,11 +2725,14 @@ void RenderShadowedObjects(bool VL_pre_rendering){
  glUniform1f(glGetUniformLocation(skinning_shader.Program, "var"), paladin.var);    
  glUniform1f(glGetUniformLocation(skinning_shader.Program, "depth_test"), 0.0);   
  glUniform1f(glGetUniformLocation(skinning_shader.Program, "face_cube"), -1.0);     
+ glUniform1i(glGetUniformLocation(skinning_shader.Program, "shadow_point_light"), shadow_point_light);
    
- glEnable(GL_CULL_FACE);
- glCullFace(GL_BACK); 
- //paladin_skinned.Render(); 
- glDisable(GL_CULL_FACE);
+ glUniform1f(glGetUniformLocation(skinning_shader.Program, "VL_intensity"), VL_intensity);
+
+ //glEnable(GL_CULL_FACE);
+ //glCullFace(GL_BACK); 
+ paladin_skinned.Render(); 
+ //glDisable(GL_CULL_FACE);
 
  glBindVertexArray(0);
  glUseProgram(0);
@@ -2497,6 +2745,8 @@ void RenderShadowedObjects(bool VL_pre_rendering){
 
  glActiveTexture(GL_TEXTURE6);
  glBindTexture(GL_TEXTURE_2D, tex_depth_house);
+ glActiveTexture(GL_TEXTURE8);
+ glBindTexture(GL_TEXTURE_CUBE_MAP, tex_shadow_cubeMap); 
 
  Msend = glm::mat4();
 
@@ -2541,19 +2791,20 @@ void RenderShadowedObjects(bool VL_pre_rendering){
  glUniform1f(glGetUniformLocation(basic_shader.Program, "var"), house.var);    
  glUniform1f(glGetUniformLocation(basic_shader.Program, "depth_test"), 0.0);    
  glUniform1f(glGetUniformLocation(basic_shader.Program, "face_cube"), -1.0);     
+ glUniform1i(glGetUniformLocation(basic_shader.Program, "shadow_point_light"), shadow_point_light);     
+
 
  glUniform4fv(glGetUniformLocation(basic_shader.Program, "fog_color"),1, &fog_color[0]);
-    /*glUniform1f(glGetUniformLocation(caillou_shader.Program, "fStart"), fog_Start);
-    glUniform1f(glGetUniformLocation(caillou_shader.Program, "fEnd"), fog_End);*/
  glUniform1f(glGetUniformLocation(basic_shader.Program, "fog_density"), fog_density);
  glUniform1f(glGetUniformLocation(basic_shader.Program, "fog_equation"), fog_equation);
  glUniform3fv(glGetUniformLocation(basic_shader.Program, "mid_fog_position"), 1, &mid_fog_position[0]);
 
-  
-  glEnable(GL_CULL_FACE);
-  glCullFace(GL_BACK);
-  house_model.Draw(basic_shader, Msend2, false);
-  glDisable(GL_CULL_FACE);
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "VL_intensity"), VL_intensity);
+
+ glEnable(GL_CULL_FACE);
+ glCullFace(GL_BACK);
+ house_model.Draw(basic_shader, Msend2, false);
+ glDisable(GL_CULL_FACE);
     
 
  glBindVertexArray(0);
@@ -2609,15 +2860,13 @@ void RenderShadowedObjects(bool VL_pre_rendering){
  glUniform1f(glGetUniformLocation(basic_shader.Program, "face_cube"), -1.0);     
 
  glUniform4fv(glGetUniformLocation(basic_shader.Program, "fog_color"),1, &fog_color[0]);
-    /*glUniform1f(glGetUniformLocation(caillou_shader.Program, "fStart"), fog_Start);
-    glUniform1f(glGetUniformLocation(caillou_shader.Program, "fEnd"), fog_End);*/
  glUniform1f(glGetUniformLocation(basic_shader.Program, "fog_density"), fog_density);
  glUniform1f(glGetUniformLocation(basic_shader.Program, "fog_equation"), fog_equation);
  glUniform3fv(glGetUniformLocation(basic_shader.Program, "mid_fog_position"), 1, &mid_fog_position[0]);
+ 
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "VL_intensity"), 0.0);
 
-  
- //sword_model.Draw(basic_shader, Msend2, false);
-    
+ sword_model.Draw(basic_shader, Msend2, false);   
 
  glBindVertexArray(0);
  glUseProgram(0);
@@ -2673,16 +2922,15 @@ void RenderShadowedObjects(bool VL_pre_rendering){
  glUniform1f(glGetUniformLocation(basic_shader.Program, "face_cube"), -1.0);     
 
  glUniform4fv(glGetUniformLocation(basic_shader.Program, "fog_color"),1, &fog_color[0]);
-    /*glUniform1f(glGetUniformLocation(caillou_shader.Program, "fStart"), fog_Start);
-    glUniform1f(glGetUniformLocation(caillou_shader.Program, "fEnd"), fog_End);*/
  glUniform1f(glGetUniformLocation(basic_shader.Program, "fog_density"), fog_density);
  glUniform1f(glGetUniformLocation(basic_shader.Program, "fog_equation"), fog_equation);
  glUniform3fv(glGetUniformLocation(basic_shader.Program, "mid_fog_position"), 1, &mid_fog_position[0]);
 
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "VL_intensity"), VL_intensity);
   
   glEnable(GL_CULL_FACE);
   glCullFace(GL_BACK);
-  //shield_model.Draw(basic_shader, Msend2, false);
+  shield_model.Draw(basic_shader, Msend2, false);
   glDisable(GL_CULL_FACE);
     
 
@@ -2840,16 +3088,46 @@ void RenderShadowedObjects(bool VL_pre_rendering){
   glUniform1f(glGetUniformLocation(particule_shader.Program, "blend_factor"), Particles -> blend_factor);
   glUniform1f(glGetUniformLocation(particule_shader.Program, "face_cube"), -1.0);
   
-
-  //Particles -> Draw(true,false);
+  Particles -> Draw(true,false);
 
   glUseProgram(0);  
- 
+  ///////////////////////////////////////////////
 
   if(VL_pre_rendering){
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
   }
 
+}
+
+
+// fonction draw quad pour post process blur
+GLuint quadVAO = 0;
+GLuint quadVBO;
+void RenderQuad()
+{
+  if (quadVAO == 0)
+  {
+    GLfloat quadVertices[] = {
+      // Positions        // Texture Coords
+      -1.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+      -1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
+      1.0f, 1.0f, 0.0f, 1.0f, 1.0f,
+      1.0f, -1.0f, 0.0f, 1.0f, 0.0f,
+    };
+    // Setup plane VAO
+    glGenVertexArrays(1, &quadVAO);
+    glGenBuffers(1, &quadVBO);
+    glBindVertexArray(quadVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), (GLvoid*)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), (GLvoid*)(3 * sizeof(GLfloat)));
+  }
+  glBindVertexArray(quadVAO);
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+  glBindVertexArray(0);
 }
 
 
@@ -2970,7 +3248,7 @@ static float acc = 0.5;
     state = 1;
   }
 
-  // dynamic poc fire light source
+  // dynamic pos fire light source
   if(acc <= 0.0){
     state2 = 1;
   }
@@ -2981,13 +3259,13 @@ static float acc = 0.5;
   if(state2 == 0){
     acc -= (ground->dt*-1)*4;
     lights[1].lightPos.z -= ((ground->dt*-1)*0.3);  
-    lights[1].lightPos.y -= ((ground->dt*-1)*0.3);  
+    lights[1].lightPos.y -= ((ground->dt*-1)*0.15);  
   }
 
   if(state2 == 1){
     acc += (ground->dt*-1)*4;
     lights[1].lightPos.z += ((ground->dt*-1)*0.3);
-    lights[1].lightPos.y += ((ground->dt*-1)*0.3);
+    lights[1].lightPos.y += ((ground->dt*-1)*0.15);
   }
   //std::cout << "acc = " << acc << std::endl;
 
