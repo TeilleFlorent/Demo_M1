@@ -1,6 +1,9 @@
 #version 330
 
 #define NB_LIGHTS 10
+#define G_SCATTERING 0.2
+#define PI 3.14159265358979323846264338
+#define NB_STEPS 10
 
 
 struct LightRes {    
@@ -44,6 +47,9 @@ uniform float send_bias;
 uniform float test_bias;
 uniform int shadow_point_light;
 
+uniform float VL_intensity;
+
+uniform mat4 lightSpaceMatrix;
 
 uniform sampler2D texture_diffuse1;
 uniform sampler2D texture_specular1;
@@ -168,6 +174,79 @@ float ShadowCalculation1(vec4 fragPosLightSpace, vec3 norm, float darkness)
 }
 
 
+
+// scaterring calculé avec la fonction de Henyey-Greenstein
+float ComputeScattering(float lightDotView){
+
+  float result = 1.0f - G_SCATTERING * G_SCATTERING;
+  result /= (4.0f * PI * pow(1.0f + G_SCATTERING * G_SCATTERING - (2.0f * G_SCATTERING) *      lightDotView, 1.5f));
+  return result;
+
+}
+
+vec3 VolumetricLightCalculation(){
+
+  vec3 acc = vec3(0.0);
+  mat4 noise = mat4(vec4(0.0f, 0.5f, 0.125f, 0.625f),
+    vec4(0.75f, 0.22f, 0.875f, 0.375f),
+    vec4(0.1875f, 0.6875f, 0.0625f, 0.5625),
+    vec4(0.9375f, 0.4375f, 0.8125f, 0.3125));
+
+
+  vec3 frag_pos = FragPos;
+  vec3 start_ray_position = viewPos;
+  vec3 end_ray_position = frag_pos; // a modif => frag_pos de la premiere intersection 
+
+  vec3 ray_vector = end_ray_position - start_ray_position;
+  float ray_length = length(ray_vector);
+
+  vec3 ray_direction = ray_vector / ray_length;
+  float step_length = ray_length / NB_STEPS;
+
+  vec3 step = ray_direction * step_length;
+
+  vec3 current_ray_position = start_ray_position;
+
+  for(int i = 0; i < NB_STEPS; i++){
+
+
+    vec4 frag_pos_light_space = lightSpaceMatrix * vec4(current_ray_position, 1.0);
+
+    vec3 projCoords = frag_pos_light_space.xyz / frag_pos_light_space.w;
+    projCoords = projCoords * 0.5 + 0.5;
+
+   
+    float shadowMapValue = texture(shadow_map1, projCoords.xy).r;
+
+    vec3 light_direction = normalize(LightPos[2] - /*FragPos*/ current_ray_position);
+    
+    if(shadowMapValue > projCoords.z)
+    {
+      acc += vec3(ComputeScattering(dot(ray_direction, light_direction))) * vec3(1.0,1.0,1.0);
+
+    }
+ 
+    // noise correction
+    float scale = 1.0;
+    float temp_x = gl_FragCoord.x * scale;
+    float temp_y = gl_FragCoord.y * scale;
+    temp_x = mod(temp_x, 4.0);
+    temp_y = mod(temp_y, 4.0);
+    float ditherValue = noise[int(temp_x)][int(temp_y)];
+
+    current_ray_position += step * ditherValue;
+  
+  }
+
+  acc /= NB_STEPS;
+
+  return acc;
+}
+
+
+
+
+
 // tableau d'offset de direction
 vec3 gridSamplingDisk[20] = vec3[]
 (
@@ -279,6 +358,11 @@ void main(void) {
      
      }
 
+    }
+
+    if(VL_intensity > 0.0){
+      float temp_res = VolumetricLightCalculation();
+      result += (temp_res * 4.5 * VL_intensity);
     }
 
     // final out color

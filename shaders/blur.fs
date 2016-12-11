@@ -4,6 +4,8 @@ in vec2 TexCoords;
 
 uniform sampler2D image;
 uniform float horizontal;
+uniform int is_reflection_blur;
+uniform float offset_factor;
 
 float weight[5] = float[] (0.2270270270, 0.1945945946, 0.1216216216, 0.0540540541, 0.0162162162);
 
@@ -12,7 +14,12 @@ void main()
 {
 
      vec2 tex_offset = 1.0 / textureSize(image, 0); // gets size of single texel
-     tex_offset *= 2.0;
+     
+     if(is_reflection_blur == 1){
+         tex_offset *= 2.5;
+     }else{
+        tex_offset *= offset_factor;
+     }
 
      vec3 result = texture(image, TexCoords).rgb * weight[0];
      if(horizontal == 1.0)

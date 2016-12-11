@@ -1103,6 +1103,7 @@ void Pre_rendu_cubeMap();
 void Pre_rendu_shadow_house(glm::mat4, glm::mat4);
 void Pre_rendu_shadow_cubeMap();
 void RenderQuad();
+void VL_blur_apply();
 
   
 /////////////////////////////////

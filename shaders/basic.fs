@@ -1,7 +1,7 @@
 #version 330
 
 #define NB_LIGHTS 10
-#define G_SCATTERING 0.3
+#define G_SCATTERING 0.2
 #define PI 3.14159265358979323846264338
 #define NB_STEPS 10
 
@@ -229,6 +229,7 @@ float FogCalculation(float fStart, float fEnd, float fDensity, float iEquation, 
   
   return fResult;
 }
+
 
 // scaterring calculé avec la fonction de Henyey-Greenstein
 float ComputeScattering(float lightDotView){
@@ -509,14 +510,15 @@ void main(void) {
     // ADD VOLUMETRIC LIGHT
     if(VL_intensity > 0.0){
       float temp_res = VolumetricLightCalculation();
-      result += (temp_res * 5.0 * VL_intensity);
+      //if(temp_res > 0.1)
+        result += (temp_res * 6.5 * VL_intensity);
     }
    
 
     fragColor = vec4(result, final_alpha);
 
     // ADD FOG
-    if(var == 2.0 || var == 0.0){
+    if(var == 0.0){
       //float FogCoord = abs(EyeSpacePos.z/EyeSpacePos.w);
       float temp_dist = distance(FragPos, mid_fog_position);
       fragColor = mix(fragColor, fog_color, FogCalculation(0.0,0.0,fog_density,fog_equation,/*FogCoord*/ temp_dist));  

@@ -1,6 +1,6 @@
 #version 330 core
 
-#define G_SCATTERING 0.3
+#define G_SCATTERING 0.2
 #define PI 3.14159265358979323846264338
 #define NB_STEPS 10
 
@@ -173,7 +173,7 @@ void main(){
 
     // ADD VOLUMETRIC LIGHT
     if(VL_intensity > 0.0){
-       result += VolumetricLightCalculation() * 5.0 * VL_intensity;
+       result += VolumetricLightCalculation() * 6.5 * VL_intensity;
     }
 
     
