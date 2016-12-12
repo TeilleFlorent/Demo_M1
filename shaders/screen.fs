@@ -3,6 +3,7 @@
 in vec2 TexCoord;
 in vec3 Positon;
 
+uniform float output_factor;
 
 out vec4 fragColor;
 uniform sampler2D depth_map_feu;
@@ -29,6 +30,8 @@ void main(void) {
 
   //result = vec3(0.0,0.0,0.0);
   //final_alpha = 1.0;
+  
+  result *= output_factor;
   fragColor = vec4(result, final_alpha);
   
 }

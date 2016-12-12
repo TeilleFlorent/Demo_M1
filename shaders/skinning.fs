@@ -362,7 +362,7 @@ void main(void) {
 
     if(VL_intensity > 0.0){
       float temp_res = VolumetricLightCalculation();
-      result += (temp_res * 4.5 * VL_intensity);
+      result += (temp_res * 4.0 * VL_intensity);
     }
 
     // final out color

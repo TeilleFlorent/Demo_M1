@@ -1095,7 +1095,7 @@ glm::mat4 zombie_script();
 static void marche_script();
 glm::vec3 walk_script();
 void camera_script();
-void audio_script();
+void audio_script(int, double);
 void fire_script();
 void fall_script();
 void script();
@@ -1104,6 +1104,9 @@ void Pre_rendu_shadow_house(glm::mat4, glm::mat4);
 void Pre_rendu_shadow_cubeMap();
 void RenderQuad();
 void VL_blur_apply();
+void initAudio();
+void load_audio();
+double bezier(double,double,double,double,double); 
 
   
 /////////////////////////////////

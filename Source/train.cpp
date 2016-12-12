@@ -160,12 +160,22 @@ glm::vec4 fog_color = glm::vec4(0.3f, 0.3f, 0.3f, 1.0f);
 float fog_equation = 2.0; 
 
 // VL intensity
-static float VL_intensity_max = 1.0;
-static float VL_intensity = VL_intensity_max;
+static float VL_intensity_max = 1.3;
+static float VL_intensity = 0.0;
 static float VL_offset_factor_max = 0.9;
 static float VL_offset_factor = VL_offset_factor_max;
 
-static int shadow_point_light = 1;
+static int shadow_point_light = 0;
+
+// SOUNDS
+static Mix_Music * S_main_music = NULL;
+static Mix_Chunk * S_wind_lowland = NULL; 
+static Mix_Chunk * S_fire = NULL; 
+
+// SCRIPT PARA
+static bool script_on = true;
+static int step = 0;
+static float output_factor = 1.0;
 
 /////////////////////////////////////////////////////////
 
@@ -183,9 +193,9 @@ int main() {
   atexit(SDL_Quit);
 
 
-/*  initAudio();
+  initAudio();
 
-  load_audio();*/
+  load_audio();
 
 
   if((_win = initWindow(w,h, &_oglContext))) {
@@ -400,7 +410,7 @@ static SDL_Window * initWindow(int w, int h, SDL_GLContext * poglContext) {
 
   if( (win = SDL_CreateWindow("Train", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 
     w, h, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | 
-        SDL_WINDOW_SHOWN /*| SDL_WINDOW_FULLSCREEN*/)) == NULL )
+        SDL_WINDOW_SHOWN | SDL_WINDOW_FULLSCREEN)) == NULL )
     return NULL;
     if( (*poglContext = SDL_GL_CreateContext(win)) == NULL ) {
       SDL_DestroyWindow(win);
@@ -423,7 +433,51 @@ static SDL_Window * initWindow(int w, int h, SDL_GLContext * poglContext) {
   return win;
 }
 
-  // fonction qui paramettre de l'openGL
+
+
+
+void initAudio() {
+
+  int mixFlags = MIX_INIT_MP3 | MIX_INIT_OGG, res;
+  res = Mix_Init(mixFlags);
+  if( (res & mixFlags) != mixFlags ) {
+    fprintf(stderr, "Mix_Init: Erreur lors de l'initialisation de la bibliothèque SDL_Mixer\n");
+    fprintf(stderr, "Mix_Init: %s\n", Mix_GetError());
+  }
+
+  if(Mix_OpenAudio(44100  /*22050*/ , /*AUDIO_S16LSB*/ MIX_DEFAULT_FORMAT, 2, 1024) < 0){
+    printf("BUG init audio\n");  
+  //exit(-4);
+  }
+
+  Mix_VolumeMusic(MIX_MAX_VOLUME/3);
+
+  Mix_AllocateChannels(10);
+
+}
+
+void load_audio(){
+
+  if(!(S_wind_lowland = Mix_LoadWAV("../Sounds/wind.wav"))){ 
+    fprintf(stderr, "BUG : %s\n", Mix_GetError());
+  }
+
+  if(!(S_fire = Mix_LoadWAV("../Sounds/fire.wav"))){ 
+    fprintf(stderr, "BUG : %s\n", Mix_GetError());
+  }
+
+
+  if(!(S_main_music = Mix_LoadMUS("../Sounds/Blonde Redhead - For the Damaged Coda.mp3"))) {
+     fprintf(stderr, "BUG : %s\n", Mix_GetError());
+  }  
+
+
+
+}
+
+
+
+// set des paramettre liés à openGL
 static void initGL(SDL_Window * win) {
 
 
@@ -1323,25 +1377,292 @@ ground->shadow_darkness = 0.65;
 
     fire_script();
 
+    if(script_on)
+      camera_script();
+
     SDL_GL_SwapWindow(win);
 
 
-    //printf("walk_speed = %f\n", walk_speed);
-
-    //printf("1cameraX = %f, cameraY = %f, cameraZ = %f\n",cameraPos.x,cameraPos.y, cameraPos.z); 
-    //printf("2cameraX = %f, cameraY = %f, cameraZ = %f\n",cameraFront.x,cameraFront.y, cameraFront.z);
-    //printf("yaw = %f, pitch = %f\n", yaw, pitch); 
+  /*  printf("1cameraX = %f, cameraY = %f, cameraZ = %f\n",cameraPos.x,cameraPos.y, cameraPos.z); 
+    printf("2cameraX = %f, cameraY = %f, cameraZ = %f\n",cameraFront.x,cameraFront.y, cameraFront.z);
+    printf("yaw = %f, pitch = %f\n", yaw, pitch); */
 
     //printf("lightX = %f, Y = %f, Z = %f\n", lights[1].lightPos.x,  lights[1].lightPos.y,  lights[1].lightPos.z);
    
     //lights[1].lightPos = glm::vec3(particules_pos.x,particules_pos.y + 0.08f,particules_pos.z);
-    Feu.x = particules_pos.x;
+    /*Feu.x = particules_pos.x;
     Feu.y = particules_pos.y - 0.11;
-    Feu.z = particules_pos.z;
+    Feu.z = particules_pos.z;*/
 
     }
 
   }
+
+void audio_script(int step, double acc){
+
+
+  /*if(!Mix_PlayingMusic())
+    Mix_FadeInMusic(S_main_music, 1, 8000);*/
+  
+  if(step == 0 && acc < 0.5){
+    if(!Mix_Playing(0)){   
+      Mix_Volume(0,MIX_MAX_VOLUME/6);
+      Mix_FadeInChannel(0, S_wind_lowland, 0, 4000);
+    }
+  }else{
+    Mix_FadeOutChannel(0,5000);
+    if(!Mix_PlayingMusic() && step == 0)
+      Mix_FadeInMusic(S_main_music, 1, 6000);    
+  }  
+
+  if(step == 8 && acc < 0.4){
+    if(!Mix_Playing(1)){   
+      Mix_Volume(1,MIX_MAX_VOLUME/3);
+      Mix_FadeInChannel(1, S_fire, 0, 100);
+    }
+  }else{
+    Mix_FadeOutChannel(1,1000);
+  }
+
+
+}
+
+
+void camera_script(){
+
+  static float speed = 0.073;
+
+
+  static double acc = 0.0;
+  glm::vec3 res;
+  glm::vec3 tab_bezier_quad_coord[50][4];
+  tab_bezier_quad_coord[0][0] = glm::vec3(23.73,6.58,-23.01);
+  tab_bezier_quad_coord[0][1] = glm::vec3(16.58,5.54,-25.92);
+  tab_bezier_quad_coord[0][2] = glm::vec3(6.26,5.76,-28.14);
+  tab_bezier_quad_coord[0][3] = glm::vec3(-10.12,5.28,-24.26);
+  tab_bezier_quad_coord[1][0] = glm::vec3(179,-59,0.0);
+  tab_bezier_quad_coord[1][1] = glm::vec3(201,-36,-0.26);
+  tab_bezier_quad_coord[1][2] = glm::vec3(190,-20,0.0);
+  tab_bezier_quad_coord[1][3] = glm::vec3(183,-26,0.0);
+
+  tab_bezier_quad_coord[2][0] = glm::vec3(-8.34,5.32,-22.98);
+  tab_bezier_quad_coord[2][1] = glm::vec3(-13.72,5.74,-16.76);
+  tab_bezier_quad_coord[2][2] = glm::vec3(-3.71,5.72,-14.18);
+  tab_bezier_quad_coord[2][3] = glm::vec3(-0.58,5.6,-6.82);
+  tab_bezier_quad_coord[3][0] = glm::vec3(-259,-36,-23.01);
+  tab_bezier_quad_coord[3][1] = glm::vec3(-286,-34,-25.92);
+  tab_bezier_quad_coord[3][2] = glm::vec3(-317,-9,-28.14);
+  tab_bezier_quad_coord[3][3] = glm::vec3(-314,-27,-24.26);
+
+  tab_bezier_quad_coord[4][0] = glm::vec3(-0.48,5.49,-5.1);
+  tab_bezier_quad_coord[4][1] = glm::vec3(-0.55,5.41,-4.64);
+  tab_bezier_quad_coord[4][2] = glm::vec3(1.78,5.55,-4.36);
+  tab_bezier_quad_coord[4][3] = glm::vec3(0.67,5.44,-5.9);
+  tab_bezier_quad_coord[5][0] = glm::vec3(-797,-18,-23.01);
+  tab_bezier_quad_coord[5][1] = glm::vec3(-790,-7,-25.92);
+  tab_bezier_quad_coord[5][2] = glm::vec3(-864, -10,-28.14);
+  tab_bezier_quad_coord[5][3] = glm::vec3(-940,-19,-24.26);
+
+  tab_bezier_quad_coord[6][0] = glm::vec3(-4.61,6.09,0.27);
+  tab_bezier_quad_coord[6][1] = glm::vec3(-2.27,9.21,0.42);
+  tab_bezier_quad_coord[6][2] = glm::vec3(2.47,8.35,-1.22);
+  tab_bezier_quad_coord[6][3] = glm::vec3(0.55,5.52,-1.65);
+  tab_bezier_quad_coord[7][0] = glm::vec3(-1081,-11,-23.01);
+  tab_bezier_quad_coord[7][1] = glm::vec3(-1106,-58,-25.92);
+  tab_bezier_quad_coord[7][2] = glm::vec3(-1259, -59,-28.14);
+  tab_bezier_quad_coord[7][3] = glm::vec3(-1263,-57,-24.26);
+
+  tab_bezier_quad_coord[8][0] = glm::vec3(-1.30,5.12,-0.82);
+  tab_bezier_quad_coord[8][1] = glm::vec3(-1.25,5.16,-0.77);
+  tab_bezier_quad_coord[8][2] = glm::vec3(-1.46,5.08,-0.61);
+  tab_bezier_quad_coord[8][3] = glm::vec3(-1.71,5.06,-0.43);
+  tab_bezier_quad_coord[9][0] = glm::vec3(-1172,-36,-23.01);
+  tab_bezier_quad_coord[9][1] = glm::vec3(-1229,-14,-25.92);
+  tab_bezier_quad_coord[9][2] = glm::vec3(-1203,-10,-28.14);
+  tab_bezier_quad_coord[9][3] = glm::vec3(-1172,-11,-24.26);
+
+  tab_bezier_quad_coord[10][0] = glm::vec3(-1.79,5.22,0.27);
+  tab_bezier_quad_coord[10][1] = glm::vec3(-1.75,5.41,1.05);
+  tab_bezier_quad_coord[10][2] = glm::vec3(-1.07,5.38,1.008);
+  tab_bezier_quad_coord[10][3] = glm::vec3(-0.73,5.27,0.40);
+  tab_bezier_quad_coord[11][0] = glm::vec3(330,-31,-23.01);
+  tab_bezier_quad_coord[11][1] = glm::vec3(282,-26,-25.92);
+  tab_bezier_quad_coord[11][2] = glm::vec3(244,-27,-28.14);
+  tab_bezier_quad_coord[11][3] = glm::vec3(215,-31,-24.26);
+
+  tab_bezier_quad_coord[12][0] = glm::vec3(-0.52,5.24,0.26);
+  tab_bezier_quad_coord[12][1] = glm::vec3(-0.88,5.35,0.186);
+  tab_bezier_quad_coord[12][2] = glm::vec3(-1.23,5.36,0.41);
+  tab_bezier_quad_coord[12][3] = glm::vec3(-1.08,5.3,0.76);
+  tab_bezier_quad_coord[13][0] = glm::vec3(57,-38,-23.01);
+  tab_bezier_quad_coord[13][1] = glm::vec3(72,-22,-25.92);
+  tab_bezier_quad_coord[13][2] = glm::vec3(47,-23,-28.14);
+  tab_bezier_quad_coord[13][3] = glm::vec3(22,-9.84,-24.26);
+
+  tab_bezier_quad_coord[14][0] = glm::vec3(-1.39,5.39,1.11);
+  tab_bezier_quad_coord[14][1] = glm::vec3(-0.90,5.51*0.95,1.72);
+  tab_bezier_quad_coord[14][2] = glm::vec3(-0.25,5.61*0.95,1.26);
+  tab_bezier_quad_coord[14][3] = glm::vec3(-0.27,5.33,0.003);
+  tab_bezier_quad_coord[15][0] = glm::vec3(-30,-27,-23.01);
+  tab_bezier_quad_coord[15][1] = glm::vec3(-133,-33,-25.92);
+  tab_bezier_quad_coord[15][2] = glm::vec3(-120,-30,-28.14);
+  tab_bezier_quad_coord[15][3] = glm::vec3(-211,-22,-24.26);
+
+  tab_bezier_quad_coord[16][0] = glm::vec3(-0.14,6.3,-0.49);
+  tab_bezier_quad_coord[16][1] = glm::vec3(-0.46,5.89,-0.15);
+  tab_bezier_quad_coord[16][2] = glm::vec3(-0.80,5.5,0.19);
+  tab_bezier_quad_coord[16][3] = glm::vec3(-1.3,5.3,0.56);
+  tab_bezier_quad_coord[17][0] = glm::vec3(467,-41,-23.01);
+  tab_bezier_quad_coord[17][1] = glm::vec3(464,-30,-25.92);
+  tab_bezier_quad_coord[17][2] = glm::vec3(446,-15,-28.14);
+  tab_bezier_quad_coord[17][3] = glm::vec3(386,35,-24.26);
+
+  tab_bezier_quad_coord[18][0] = glm::vec3(-0.67,5.56,0.06);
+  tab_bezier_quad_coord[18][1] = glm::vec3(-1.08,5.6,-0.09);
+  tab_bezier_quad_coord[18][2] = glm::vec3(-1.43,5.6,0.3);
+  tab_bezier_quad_coord[18][3] = glm::vec3(-1.45,5.6,0.8);
+  tab_bezier_quad_coord[19][0] = glm::vec3(105,-10,-23.01);
+  tab_bezier_quad_coord[19][1] = glm::vec3(75,-9,-25.92);
+  tab_bezier_quad_coord[19][2] = glm::vec3(42,-2.3,-28.14);
+  tab_bezier_quad_coord[19][3] = glm::vec3(20,-7.3,-24.26);
+
+  tab_bezier_quad_coord[20][0] = glm::vec3(-0.46,5.18,1.03);
+  tab_bezier_quad_coord[20][1] = glm::vec3(-0.03,5.18,-0.1);
+  tab_bezier_quad_coord[20][2] = glm::vec3(0.38,5.14,-0.05);
+  tab_bezier_quad_coord[20][3] = glm::vec3(0.89,5.11,-0.64);
+  tab_bezier_quad_coord[21][0] = glm::vec3(-112,7,-23.01);
+  tab_bezier_quad_coord[21][1] = glm::vec3(-132,-0.7,-25.92);
+  tab_bezier_quad_coord[21][2] = glm::vec3(-100,-9,-28.14);
+  tab_bezier_quad_coord[21][3] = glm::vec3(-144,-11,-24.26);
+
+  tab_bezier_quad_coord[22][0] = glm::vec3(-1.17,5.4,-1.15);
+  tab_bezier_quad_coord[22][1] = glm::vec3(-0.75,5.50,-1.7);
+  tab_bezier_quad_coord[22][2] = glm::vec3(0.36,5.26,-1.47);
+  tab_bezier_quad_coord[22][3] = glm::vec3(0.025,5.24,0.15);
+  tab_bezier_quad_coord[23][0] = glm::vec3(-315,-27,-23.01);
+  tab_bezier_quad_coord[23][1] = glm::vec3(-282,-22,-25.92);
+  tab_bezier_quad_coord[23][2] = glm::vec3(-230,-11,-28.14);
+  tab_bezier_quad_coord[23][3] = glm::vec3(-128,-4,-24.26);
+
+  tab_bezier_quad_coord[24][0] = glm::vec3(-2.11,5.66,0.44);
+  tab_bezier_quad_coord[24][1] = glm::vec3(-1.17,6.00,0.29);
+  tab_bezier_quad_coord[24][2] = glm::vec3(-0.57,6.15,-0.49);
+  tab_bezier_quad_coord[24][3] = glm::vec3(-0.70,5.89,-1.30);
+  tab_bezier_quad_coord[25][0] = glm::vec3(-83,54,-23.01);
+  tab_bezier_quad_coord[25][1] = glm::vec3(-83,46,-25.92);
+  tab_bezier_quad_coord[25][2] = glm::vec3(-90,49,-28.14);
+  tab_bezier_quad_coord[25][3] = glm::vec3(-93,59.89,-24.26);
+
+
+  /////////////////////////
+
+  if(acc < 1.0){
+    acc += ground->dt * -speed;
+    //std::cout << "acc = " << acc << std::endl;
+  }else{
+    if(step < 24){
+      step +=2;
+      acc = 0.0;
+    }
+
+    if(step == 2)
+      speed = 0.073;
+    
+    if(step == 4)
+      speed = 0.15;
+
+    if(step == 6)
+      speed = 0.15;
+
+    if(step == 8){
+      speed = 0.09;
+      shadow_point_light = 1.0;
+    }
+ 
+    if(step == 10){
+      speed = 0.08;
+    }
+
+    if(step == 12){
+      speed = 0.1;
+    }
+
+    if(step == 14){
+      speed = 0.1;
+    }
+
+    if(step == 16){
+      speed = 0.13;
+    }
+
+    if(step == 18){
+      speed = 0.06;
+    }
+
+    if(step == 20){
+      speed = 0.1;
+    }
+
+    if(step == 22){
+      speed = 0.1;
+    }
+
+    if(step == 24){
+      speed = 0.075;
+    }
+
+
+  }
+
+  if(step >= 20 && (VL_intensity < VL_intensity_max)){
+    VL_intensity += ground->dt * -1.0 * 0.25;
+  }
+
+  if(step == 24 && acc > 0.99){
+    //if(output_factor > 0.0)
+    output_factor += ground->dt * -1.0 * 0.5;
+    Mix_FadeOutMusic(5000);
+  }
+
+  //std::cout << "VL_intensity = " << VL_intensity << std::endl;
+  //std::cout << "step = " << step << std::endl;
+
+
+  res.x = bezier(tab_bezier_quad_coord[step][0].x,tab_bezier_quad_coord[step][1].x,tab_bezier_quad_coord[step][2].x,tab_bezier_quad_coord[step][3].x, acc);
+  res.y = bezier(tab_bezier_quad_coord[step][0].y,tab_bezier_quad_coord[step][1].y,tab_bezier_quad_coord[step][2].y,tab_bezier_quad_coord[step][3].y, acc);
+  res.z = bezier(tab_bezier_quad_coord[step][0].z,tab_bezier_quad_coord[step][1].z,tab_bezier_quad_coord[step][2].z,tab_bezier_quad_coord[step][3].z, acc);
+
+  yaw = bezier(tab_bezier_quad_coord[step+1][0].x,tab_bezier_quad_coord[step+1][1].x,tab_bezier_quad_coord[step+1][2].x,tab_bezier_quad_coord[step+1][3].x, acc);
+  pitch = bezier(tab_bezier_quad_coord[step+1][0].y,tab_bezier_quad_coord[step+1][1].y,tab_bezier_quad_coord[step+1][2].y,tab_bezier_quad_coord[step+1][3].y, acc);
+  
+  cameraPos = res;
+
+  audio_script(step, acc);
+
+}
+
+
+double bezier(double A,  // Start value
+              double B,  // First control value
+              double C,  // Second control value
+              double D,  // Ending value
+              double t)  // Parameter 0 <= t <= 1
+{
+    /*double s = 1 - t;
+    double AB = A*s + B*t;
+    double BC = B*s + C*t;
+    double CD = C*s + D*t;
+    double ABC = AB*s + BC*t;
+    double BCD = BC*s + CD*t;
+    return ABC*s + BCD*t;*/
+     double s = 1 - t;
+    double AB = A*s + B*t;
+    double BC = B*s + C*t;
+    double CD = C*s + D*t;
+    double ABC = AB*s + CD*t;
+    double BCD = BC*s + CD*t;
+    return ABC*s + BCD*t;
+}
 
 
 /*!\brief Cette fonction permet de gérer les évènements clavier et
@@ -1359,11 +1680,9 @@ ground->shadow_darkness = 0.65;
 
   GLfloat camera_speed = walk_speed*20;
 
-  if(RUN_MODE == 0 || RUN_MODE == 2){
-
 
   if(fly_state == true)
-    camera_speed = walk_speed*5;
+    camera_speed = walk_speed*10;
 
   //printf("camera_speed = %f\n", camera_speed);
 
@@ -1392,94 +1711,7 @@ ground->shadow_darkness = 0.65;
 
    }
 
-///////////////////////////////////
 
- float temp1,temp2,temp3, temp;
- glm::vec3 p1,p2,p3,p_temp,p_calc;
-
- p1 = glm::vec3((MyMap.VertexData[0][0].x*ground->scale), (MyMap.VertexData[0][0].y*ground->scale), (MyMap.VertexData[0][0].z*ground->scale));
- p2 = glm::vec3((MyMap.VertexData[0][1].x*ground->scale), (MyMap.VertexData[0][1].y*ground->scale), (MyMap.VertexData[0][1].z*ground->scale));
- p3 = glm::vec3((MyMap.VertexData[0][2].x*ground->scale), (MyMap.VertexData[0][2].y*ground->scale), (MyMap.VertexData[0][2].z*ground->scale));
-
-
- temp1 = glm::distance(glm::vec3(p1.x, 0.0, p1.z), glm::vec3(cameraPos.x, 0.0, cameraPos.z));
- temp2 = glm::distance(glm::vec3(p2.x, 0.0, p2.z), glm::vec3(cameraPos.x, 0.0, cameraPos.z));
-
- if(temp2 < temp1){
-  p_temp = p1;
-  p1 = p2;
-  p2 = p_temp;
- }
-
- temp1 = glm::distance(glm::vec3(p1.x, 0.0, p1.z), glm::vec3(cameraPos.x, 0.0, cameraPos.z));
- temp2 = glm::distance(glm::vec3(p2.x, 0.0, p2.z), glm::vec3(cameraPos.x, 0.0, cameraPos.z));
- temp3 = glm::distance(glm::vec3(p3.x, 0.0, p3.z), glm::vec3(cameraPos.x, 0.0, cameraPos.z));
-
- if(temp3 < temp1){
-
-  p_temp = p3;
-  p3 = p2;
-  p2 = p1;
-  p1 = p_temp;
-
- }else{ 
-
-  if(temp3 < temp2 && temp3 > temp1){
-
-    p_temp = p3;
-    p3 = p2;
-    p2 = p_temp;
-
-  }
-
- }
-
-
-  for(int i = 0; i < MyMap.iRows; i++){
-    for(int j = 0; j < MyMap.iCols; j++){
-      
-      //if((cameraPos.x < (MyMap.VertexData[i][j].x*ground->scale)+0.99 && cameraPos.x > (MyMap.VertexData[i][j].x*ground->scale)-0.99) 
-      //&& (cameraPos.z < (MyMap.VertexData[i][j].z*ground->scale)+0.99 && cameraPos.z > (MyMap.VertexData[i][j].z*ground->scale)-0.99)){
-      //  cameraPos.y = (MyMap.VertexData[i][j].y*ground->scale)+(ground->y)+0.4;
-      //}
-
-     temp1 = glm::distance(glm::vec3(p1.x, 0.0, p1.z), glm::vec3(cameraPos.x, 0.0, cameraPos.z));
-     temp2 = glm::distance(glm::vec3(p2.x, 0.0, p2.z), glm::vec3(cameraPos.x, 0.0, cameraPos.z));
-     temp3 = glm::distance(glm::vec3(p3.x, 0.0, p3.z), glm::vec3(cameraPos.x, 0.0, cameraPos.z));
-
-
-        p_calc = glm::vec3((MyMap.VertexData[i][j].x*ground->scale), (MyMap.VertexData[i][j].y*ground->scale), (MyMap.VertexData[i][j].z*ground->scale)); 
-        temp = glm::distance(glm::vec3(p_calc.x, 0.0, p_calc.z), glm::vec3(cameraPos.x, 0.0, cameraPos.z));
-
-
-        if(temp < temp1){
-
-          p3 = p2;
-          p2 = p1;
-          p1 = p_calc;
-
-        }else{ 
-
-          if(temp < temp2 && temp > temp1){
-
-            p3 = p2;
-            p2 = p_calc;
-
-          }else{
-            if(temp < temp3 && temp > temp2){
-
-              p3 = p_calc;
-
-            }
-          }
-
-        }
-
-
-    }
-  }
-
-}
 
 //////////////////////////////////////
 
@@ -1556,12 +1788,17 @@ while(SDL_PollEvent(&event))
      break;
 
      case 'a' :
-     VL_intensity += 0.01;
-     std::cout << "VL_intensity = " <<  VL_intensity << std::endl;
+     if(script_on){
+      script_on = false;
+     }else{
+      script_on = true;
+     }
+    /* VL_intensity += 0.01;
+     std::cout << "VL_intensity = " <<  VL_intensity << std::endl;*/
      break;
 
      case 'e' :
-     VL_intensity -= 0.01;
+     VL_intensity += 0.01;
      std::cout << "VL_intensity = " <<  VL_intensity << std::endl;
      break;
 
@@ -1729,9 +1966,10 @@ SDL_GetRelativeMouseState(&x,&y);
 
      if (pitch > 89.0f)
         pitch = 89.0f;
-    if (pitch < -89.0f)
+      if (pitch < -89.0f)
         pitch = -89.0f;
 
+      
       //glm::vec3 front;
       front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
       front.y = sin(glm::radians(pitch));
@@ -1820,6 +2058,8 @@ static void draw() {
 
  glBindVertexArray(screenVAO);
 
+ glUniform1f(glGetUniformLocation(screen_shader.Program, "output_factor"), output_factor);
+   
  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
  glBindVertexArray(0);
@@ -2538,13 +2778,13 @@ void RenderShadowedObjects(bool VL_pre_rendering){
 
 
   // DRAW LAMP
- lamp_shader.Use();
+ /*lamp_shader.Use();
  
  glBindVertexArray(lampVAO);
 
  Msend= glm::mat4();
  Msend = glm::translate(Msend, lights[1].lightPos);
- Msend = glm::scale(Msend, glm::vec3(0.01f)); 
+ Msend = glm::scale(Msend, glm::vec3(0.07f)); 
 
  glm::vec3 lampColor(0.2,0.2,0.9);
 
@@ -2553,10 +2793,10 @@ void RenderShadowedObjects(bool VL_pre_rendering){
  glUniformMatrix4fv(glGetUniformLocation(lamp_shader.Program, "projection"), 1, GL_FALSE, glm::value_ptr(projectionM));
  glUniform3f(glGetUniformLocation(lamp_shader.Program, "lampColor"), lampColor.x,lampColor.z,lampColor.z);
 
- //glDrawArrays(GL_TRIANGLES, 0, nbVerticesSphere);
+ glDrawArrays(GL_TRIANGLES, 0, nbVerticesSphere);
 
  glBindVertexArray(0);
- glUseProgram(0);
+ glUseProgram(0);*/
 
 
 
@@ -2765,7 +3005,10 @@ void RenderShadowedObjects(bool VL_pre_rendering){
 
 //printf("t = %f\n", zombie[0].t);
         
- float RunningTime1 = (float)((double)ground->t - ((double)0.0f+start_anim))/1000.0f; 
+ float RunningTime1, RunningTime2;
+ static float anim2_start = -1.0;
+ static float anim3_start = -1.0;
+
  //float RunningTime2 = (float)((double)zombie[1].t - ((double)4600.0f+start_anim))/1000.0f; 
  //float RunningTime3 = ((float)((double)zombie[1].t - ((double)6700.0f+4600.0+start_anim))/1000.0f); 
  //float RunningTime4 = ((float)((double)zombie[1].t - ((double)6700.0f+4600.0+3700.0+start_anim))/1000.0f); 
@@ -2774,18 +3017,34 @@ void RenderShadowedObjects(bool VL_pre_rendering){
 
  /*if(zombie[0].t < start_anim)
   paladin_skinned.BoneTransform(0.0, Transforms, paladin_sitting_idle);*/
+
+
+ RunningTime1 = (float)((double)ground->t)/1000.0f;
   
-  
-  if(RunningTime1 >= 0.0 /*&& RunningTime1 <= 1000.0*/){
-    paladin_skinned.BoneTransform(RunningTime1, Transforms, /*paladin_sitting_idle*/ /*paladin_standing_up*/ /*paladin_breathing_idle*/ paladin_warrior_idle);
+
+  if(step < 16){
+    paladin_skinned.BoneTransform(RunningTime1, Transforms, paladin_sitting_idle /*paladin_standing_up*/ /*paladin_breathing_idle*/ /*paladin_warrior_idle*/);
   }
 
-  /*if(RunningTime2 >= 0.0 && RunningTime2 < 4.6+6.7+(start_anim/1000.0)){
+  if(step == 16){
+    if(anim2_start == -1.0)
+      anim2_start = (float)((double)ground->t)/1000.0f;
 
-    zombie_model.BoneTransform(RunningTime2, Transforms, zombie_attack);
+    RunningTime2 = (float)((double)ground->t)/1000.0f;
+    RunningTime2 = (RunningTime2 - anim2_start) + 3.0f;
+    paladin_skinned.BoneTransform(RunningTime2, Transforms, paladin_standing_up);
   }
 
-  if(RunningTime3 >= 0.0 && RunningTime3 < 4.6+6.7+3.7+(start_anim/1000.0)){
+  if(step > 16){
+    if(anim3_start == -1.0)
+      anim3_start = (float)((double)ground->t)/1000.0f;
+
+    RunningTime2 = (float)((double)ground->t)/1000.0f;
+    RunningTime2 = (RunningTime2 - anim3_start);
+    paladin_skinned.BoneTransform(RunningTime2, Transforms, paladin_warrior_idle);
+  }
+
+/*  if(RunningTime3 >= 0.0 && RunningTime3 < 4.6+6.7+3.7+(start_anim/1000.0)){
 
     zombie_model.BoneTransform(RunningTime3+0.28f, Transforms, zombie_scream);
   }
@@ -3000,7 +3259,7 @@ void RenderShadowedObjects(bool VL_pre_rendering){
  glUniform1f(glGetUniformLocation(basic_shader.Program, "fog_equation"), fog_equation);
  glUniform3fv(glGetUniformLocation(basic_shader.Program, "mid_fog_position"), 1, &mid_fog_position[0]);
  
- glUniform1f(glGetUniformLocation(basic_shader.Program, "VL_intensity"), 0.0);
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "VL_intensity"), VL_intensity);
 
  sword_model.Draw(basic_shader, Msend2, false);   
 
@@ -3385,21 +3644,21 @@ static float acc = 0.5;
   }
 
   // dynamic pos fire light source
-  if(acc <= 0.0){
+  if(acc <= 0.25){
     state2 = 1;
   }
-  if(acc >= 1.0){
+  if(acc >= 0.75){
     state2 = 0;
   }
 
   if(state2 == 0){
-    acc -= (ground->dt*-1)*4;
+    acc -= (ground->dt*-1)*2;
     lights[1].lightPos.z -= ((ground->dt*-1)*0.3);  
     lights[1].lightPos.y -= ((ground->dt*-1)*0.15);  
   }
 
   if(state2 == 1){
-    acc += (ground->dt*-1)*4;
+    acc += (ground->dt*-1)*2;
     lights[1].lightPos.z += ((ground->dt*-1)*0.3);
     lights[1].lightPos.y += ((ground->dt*-1)*0.15);
   }
