@@ -21,7 +21,9 @@ Model house_model;
 Model sword_model;
 Model shield_model;
 Model tree1_model;
+Model tree2_model;
 Model rock1_model;
+Model rock2_model;
 SkinnedMesh paladin_skinned;
 SkinnedMesh_animation paladin_sitting_idle;
 SkinnedMesh_animation paladin_standing_up;
@@ -266,14 +268,14 @@ int main() {
     shield_model.Load_Model("../Models/shield/Shield_MedPoly.obj", 5);    
     //shield_model.Print_info_model();
 
-    //tree1_model.Load_Model("../Models/tree1/DeadTree1.obj", 6);    
-    //tree1_model.Print_info_model();
+    tree1_model.Load_Model("../Models/tree1/DeadTree1.obj", 6);    
+    //tree2_model.Print_info_model();
 
-   /* tree1_model.Load_Model("../Models/tree2/Tree_Dry_1.obj", 6);    
-    tree1_model.Print_info_model();*/
 
-   /* rock1_model.Load_Model("../Models/rock2/Rock_10.obj", 7);    
-    rock1_model.Print_info_model();*/
+    rock1_model.Load_Model("../Models/rock2/Rock_10.obj", 7);    
+    rock2_model.Load_Model("../Models/rock1/Rock_6.OBJ", 9);    
+
+    //rock1_model.Print_info_model();
 
     house_model.Load_Model("../Models/house2/Abandoned house.obj", 2);
     //house_model.Print_info_model();
@@ -283,7 +285,7 @@ int main() {
 
     paladin_sitting_idle.LoadMesh("../Models/paladin_skinned/paladin/paladin/paladin/paladin/paladin/sitting_idle.fbx");
     paladin_standing_up.LoadMesh("../Models/paladin_skinned/paladin/paladin/paladin/paladin/paladin/standing_up.fbx");
-    paladin_breathing_idle.LoadMesh("../Models/paladin_skinned/paladin/paladin/paladin/paladin/paladin/breathing_idle.fbx");
+    //paladin_breathing_idle.LoadMesh("../Models/paladin_skinned/paladin/paladin/paladin/paladin/paladin/breathing_idle.fbx");
     paladin_warrior_idle.LoadMesh("../Models/paladin_skinned/paladin/paladin/paladin/paladin/paladin/warrior_idle.fbx");
     
     // gen le tab de uniform location du tab de bone dans les shader
@@ -1288,16 +1290,31 @@ ground->shadow_darkness = 0.65;
   trees[i].DiffuseStr = 0.5;
   trees[i].SpecularStr = 0.3;
   trees[i].ShiniStr = 4; // 4 8 16 ... 256 
-  trees[i].angle=0.67;
   trees[i].acca=0.105;
-  trees[i].var=6.0;
-  trees[i].scale = 0.0009;
-
+  
   trees[i].alpha = 1.0;
 
-  trees[i].x = 2.0;
-  trees[i].y = 6.0;
-  trees[i].z = 0.0;
+  if(i == 0){
+    trees[i].angle=0.67;
+    trees[i].x = -6.27;
+    trees[i].y = 2.88;
+    trees[i].z = -24.11;
+    trees[i].var=6.0;
+    trees[i].scale = 0.009;
+  }
+
+  if(i == 1){
+    trees[i].AmbientStr = 0.4;
+    trees[i].DiffuseStr = 0.4;
+    trees[i].SpecularStr = 0.1;
+  
+    trees[i].angle=0.67;
+    trees[i].x = -7.78;
+    trees[i].y = 4.51;
+    trees[i].z = 4.96;
+    trees[i].var = 8.0;
+    trees[i].scale = 0.0013;
+  }
 
   trees[i].start=0.0;
   trees[i].dt=0.0;
@@ -1319,14 +1336,30 @@ ground->shadow_darkness = 0.65;
   rocks[i].ShiniStr = 4; // 4 8 16 ... 256 
   rocks[i].angle=0.67;
   rocks[i].acca=0.105;
-  rocks[i].var=7.0;
-  rocks[i].scale = 1.0;
 
-  rocks[i].alpha = 1.0;
+  if(i == 0){
+    rocks[i].var=7.0;
+    rocks[i].scale = 0.5;
+    rocks[i].alpha = 1.0;
 
-  rocks[i].x = 2.0;
-  rocks[i].y = 6.0;
-  rocks[i].z = 0.0;
+    rocks[i].x = -1.15;
+    rocks[i].y = 1.89;
+    rocks[i].z = -32.33;
+  }
+
+   if(i == 1){
+
+    rocks[i].AmbientStr = 0.4;
+    rocks[i].DiffuseStr = 0.4;
+    rocks[i].SpecularStr = 0.2;
+    rocks[i].var=9.0;
+    rocks[i].scale = 1.5;
+    rocks[i].alpha = 1.0;
+
+    rocks[i].x = 6.75;
+    rocks[i].y = 5.17;
+    rocks[i].z = -4.3;
+  }
 
   rocks[i].start=0.0;
   rocks[i].dt=0.0;
@@ -1346,7 +1379,7 @@ ground->shadow_darkness = 0.65;
   SDL_GetWindowSize(win, &w, &h);
   //glViewport(0, 0, w, h);
 
-  std::cout << "W = " << w << ", H = " << h << std::endl;
+  //std::cout << "W = " << w << ", H = " << h << std::endl;
 
   SDL_WarpMouseInWindow(win,w/2.0,h/2.0);
 
@@ -1682,7 +1715,7 @@ double bezier(double A,  // Start value
 
 
   if(fly_state == true)
-    camera_speed = walk_speed*10;
+    camera_speed = walk_speed*50;
 
   //printf("camera_speed = %f\n", camera_speed);
 
@@ -1764,10 +1797,12 @@ while(SDL_PollEvent(&event))
     switch(event.key.keysym.sym) {
 
      case SDLK_ESCAPE:
-     printf("\ntime = %f\n", ground->t);
+    
+    /* printf("\ntime = %f\n", ground->t);
      std::cout << "x = " << cameraPos.x << ", y = " <<  cameraPos.y << ", z = " <<  cameraPos.z << std::endl;
      std::cout << "pos = " << trees[0].x << " " << trees[0].y << " " << trees[0].z << std::endl;
-     std::cout << "angle = " << shield.angle << std::endl;
+     std::cout << "angle = " << shield.angle << std::endl;*/
+    
      exit(0);
 
 
@@ -1811,17 +1846,17 @@ while(SDL_PollEvent(&event))
      break;
 
      case 'y' :
-     trees[0].z -= 0.2;
+     rocks[0].z -= 0.2;
      break;
 
      case 'w' :
-     VL_offset_factor += 0.01;
-     std::cout << "blur offset = " <<  VL_offset_factor << std::endl;
+     rocks[1].y += 0.01;
+     std::cout << "y = " <<  rocks[1].y << std::endl;
      break;
 
      case 'x' :
-     VL_offset_factor -= 0.01;
-     std::cout << "blur offset = " <<  VL_offset_factor << std::endl;    
+     rocks[1].y -= 0.01;
+     std::cout << "y = " <<  rocks[1].y << std::endl;
      break;
 
     /* case 'm' :
@@ -3332,13 +3367,14 @@ void RenderShadowedObjects(bool VL_pre_rendering){
  glBindVertexArray(0);
  glUseProgram(0);
 
- ///////////////////////// DRAW TREE(S)
-/* basic_shader.Use();
+ if(step < 8){
+ ///////////////////////// DRAW TREE 1
+ basic_shader.Use();
  
  Msend = glm::mat4();
  Msend = glm::translate(Msend, glm::vec3(trees[0].x,trees[0].y,trees[0].z));
  //Msend = glm::rotate(Msend, trees[0].angle, glm::vec3(0.0, 1.0 , 0.0));
- //Msend = glm::rotate(Msend, trees[0].angle*4.0f, glm::vec3(1.0, 0.0 , 0.0));
+ Msend = glm::rotate(Msend, trees[0].angle * 1.0f, glm::vec3(0.0, 1.0, 0.0));
  Msend = glm::scale(Msend, glm::vec3(trees[0].scale)); 
 
  glUniformMatrix4fv(glGetUniformLocation(basic_shader.Program, "viewMatrix"), 1, GL_FALSE, glm::value_ptr(viewMatrix));
@@ -3385,18 +3421,18 @@ void RenderShadowedObjects(bool VL_pre_rendering){
  glUniform3fv(glGetUniformLocation(basic_shader.Program, "mid_fog_position"), 1, &mid_fog_position[0]);
 
   
-  //glEnable(GL_CULL_FACE);
-  //glCullFace(GL_BACK);
+  glEnable(GL_CULL_FACE);
+  glCullFace(GL_BACK);
   tree1_model.Draw(basic_shader, Msend2, false);
-  //glDisable(GL_CULL_FACE);
+  glDisable(GL_CULL_FACE);
     
 
  glBindVertexArray(0);
  glUseProgram(0);
-*/
 
- // DRAW ROCKS
-/* basic_shader.Use();
+
+ // DRAW ROCK 1
+ basic_shader.Use();
  
  Msend = glm::mat4();
  Msend = glm::translate(Msend, glm::vec3(rocks[0].x,rocks[0].y,rocks[0].z));
@@ -3447,15 +3483,76 @@ void RenderShadowedObjects(bool VL_pre_rendering){
  glUniform3fv(glGetUniformLocation(basic_shader.Program, "mid_fog_position"), 1, &mid_fog_position[0]);
 
   
-  //glEnable(GL_CULL_FACE);
-  //glCullFace(GL_BACK);
+  glEnable(GL_CULL_FACE);
+  glCullFace(GL_BACK);
   rock1_model.Draw(basic_shader, Msend2, false);
-  //glDisable(GL_CULL_FACE);
+  glDisable(GL_CULL_FACE);
     
 
  glBindVertexArray(0);
- glUseProgram(0);*/
+ glUseProgram(0);
 
+// DRAW ROCK 2
+ basic_shader.Use();
+ 
+ Msend = glm::mat4();
+ Msend = glm::translate(Msend, glm::vec3(rocks[1].x,rocks[1].y,rocks[1].z));
+ //Msend = glm::rotate(Msend, rocks[1].angle, glm::vec3(0.0, 1.0 , 0.0));
+ //Msend = glm::rotate(Msend, rocks[1].angle*4.0f, glm::vec3(1.0, 0.0 , 0.0));
+ Msend = glm::scale(Msend, glm::vec3(rocks[1].scale)); 
+
+ glUniformMatrix4fv(glGetUniformLocation(basic_shader.Program, "viewMatrix"), 1, GL_FALSE, glm::value_ptr(viewMatrix));
+ glUniformMatrix4fv(glGetUniformLocation(basic_shader.Program, "modelViewMatrix"), 1, GL_FALSE, glm::value_ptr(Msend));
+ glUniformMatrix4fv(glGetUniformLocation(basic_shader.Program, "projectionMatrix"), 1, GL_FALSE, glm::value_ptr(projectionM));
+ //glUniformMatrix4fv(glGetUniformLocation(basic_shader.Program, "lightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(light_space_matrix));
+ //glUniform1f(glGetUniformLocation(basic_shader.Program, "send_bias"), send_bias);
+
+
+ glUniform3fv(glGetUniformLocation(basic_shader.Program, "LightPos[0]"),1, &lights[0].lightPos[0]);
+ glUniform3fv(glGetUniformLocation(basic_shader.Program, "LightColor[0]"),1, &lights[0].lightColor[0]);
+ glUniform3fv(glGetUniformLocation(basic_shader.Program, "LightSpecularColor[0]"),1, &lights[0].lightSpecularColor[0]);
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "constant[0]"),1.0f);
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "linear[0]"),  0.007);
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "quadratic[0]"), 0.0002);
+ 
+
+ glUniform3fv(glGetUniformLocation(basic_shader.Program, "LightPos[1]"),1, &lights[1].lightPos[0]);
+ glUniform3fv(glGetUniformLocation(basic_shader.Program, "LightColor[1]"),1, &lights[1].lightColor[0]);
+ glUniform3fv(glGetUniformLocation(basic_shader.Program, "LightSpecularColor[1]"),1, &lights[1].lightSpecularColor[0]);
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "constant[1]"),1.0f);
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "linear[1]"),  0.5);
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "quadratic[1]"), 0.9);
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "fire_intensity"), fire_intensity);
+
+
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "ambientSTR"), rocks[1].AmbientStr);
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "diffuseSTR"), rocks[1].DiffuseStr);
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "specularSTR"), rocks[1].SpecularStr);
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "ShiniSTR"), rocks[1].ShiniStr);
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "shadow_darkness"), rocks[1].shadow_darkness);
+ 
+ glUniform3fv(glGetUniformLocation(basic_shader.Program, "viewPos"), 1, &cameraPos[0]);
+
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "alpha"), rocks[1].alpha);
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "var"), rocks[1].var);    
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "depth_test"), 0.0);    
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "face_cube"), -1.0);     
+
+ glUniform4fv(glGetUniformLocation(basic_shader.Program, "fog_color"),1, &fog_color[0]);
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "fog_density"), fog_density);
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "fog_equation"), fog_equation);
+ glUniform3fv(glGetUniformLocation(basic_shader.Program, "mid_fog_position"), 1, &mid_fog_position[0]);
+
+  
+  glEnable(GL_CULL_FACE);
+  glCullFace(GL_BACK);
+  rock2_model.Draw(basic_shader, Msend2, false);
+  glDisable(GL_CULL_FACE);
+    
+
+ glBindVertexArray(0);
+ glUseProgram(0);
+ }
 
 
 
@@ -3533,7 +3630,7 @@ static void printFPS(void) {
   f++;
   t = SDL_GetTicks();
   if(t - t0 > 1000) {
-      fprintf(stderr, "%8.2f\n", (1000.0 * f / (t - t0)));
+      fprintf(stderr, "FPS = %8.2f\n", (1000.0 * f / (t - t0)));
     t0 = t;
     f  = 0;
   }

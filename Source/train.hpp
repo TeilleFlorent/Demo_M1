@@ -849,6 +849,82 @@ public:
 
        }
 
+       // FOR ROCK2 ONLY
+         if(this -> model_id == 7){
+
+            GLboolean skip = false;
+
+            string temp1;
+            
+            aiString str;
+            
+
+            if(!skip){
+             // base
+               temp1 = "Rock_10_d.tga";            
+               str.Set(temp1);
+
+               Texture texture;
+               texture.id = TextureFromFile(str.C_Str() , this->directory);
+               texture.path = str;
+               temp1 = "texture_diffuse";
+               texture.type = temp1;
+               textures.push_back(texture);
+               this->textures_loaded.push_back(texture);  
+            
+             // normal
+                 temp1 = "Rock_10_n.tga";            
+                 str.Set(temp1);
+            
+                 texture.id = TextureFromFile(str.C_Str() , this->directory);
+                 texture.path = str;
+                 temp1 = "texture_normal";
+                 texture.type = temp1;
+                 textures.push_back(texture);
+                 this->textures_loaded.push_back(texture);  
+               
+           }
+
+       }
+
+       // FOR ROCK1 ONLY
+          if(this -> model_id == 9){
+
+            GLboolean skip = false;
+
+            string temp1;
+            
+            aiString str;
+            
+
+            if(!skip){
+             // base
+               temp1 = "Rock_6_d.png";            
+               str.Set(temp1);
+
+               Texture texture;
+               texture.id = TextureFromFile(str.C_Str() , this->directory);
+               texture.path = str;
+               temp1 = "texture_diffuse";
+               texture.type = temp1;
+               textures.push_back(texture);
+               this->textures_loaded.push_back(texture);  
+            
+             // normal
+                 temp1 = "Rock_6_n.png";            
+                 str.Set(temp1);
+            
+                 texture.id = TextureFromFile(str.C_Str() , this->directory);
+                 texture.path = str;
+                 temp1 = "texture_normal";
+                 texture.type = temp1;
+                 textures.push_back(texture);
+                 this->textures_loaded.push_back(texture);  
+               
+           }
+
+       }
+
        // FOR TREE ONLY
        if(this->directory.find("tree2") != std::string::npos){
 
@@ -1154,9 +1230,9 @@ GLint TextureFromFile(const char* path, string directory)
     t = IMG_Load(filename.c_str());
 
 
-    std::cout << "test1 = " << path << std::endl;
+    /*std::cout << "test1 = " << path << std::endl;
     std::cout << "test2 = " << directory << std::endl;     
-    std::cout << "test3 = " << filename << std::endl;     
+    std::cout << "test3 = " << filename << std::endl;     */
     
 
 /*    if(!t)

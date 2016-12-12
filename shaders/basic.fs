@@ -344,10 +344,17 @@ void main(void) {
     vec3 color;
     float final_alpha;
 
-    color = texture(texture_diffuse1, TexCoord).rgb;
+    if(var == 7.0){
+      color = texture(texture_diffuse1, TexCoord).bgr;
+    }else{
+      color = texture(texture_diffuse1, TexCoord).rgb;
+      if(var == 8.0)
+        color *= vec3(1.0,0.85,1.0);
+    }
+
     
-    /*if(var == 2.0){
-      //color = texture(texture_specular1, TexCoord).rgb;
+    /*if(var == 9.0){
+      //color = texture(texture_normal1, TexCoord).rgb;
       color = vec3(1.0);
     }*/
 
@@ -359,7 +366,7 @@ void main(void) {
     // LIGHT CALCULATION
     vec3 norm = normalize(vsoNormal);
     // normal mapping
-    if(var == 5.0 || var == 3.0 || var == 4.0 || var == 0.0 || (var == 2.0 /*&& ShiniSTR != 1.0*/)){
+    if(var == 9.0 || var == 7.0 || var == 5.0 || var == 3.0 || var == 4.0 || var == 0.0 || (var == 2.0 /*&& ShiniSTR != 1.0*/)){
        norm = normal_mapping_calculation();
     }
 
@@ -395,7 +402,7 @@ void main(void) {
 
     // FINAL LIGHT
     vec3 result = (LightRes1.ambient + LightRes1.diffuse + LightRes1.specular);
-    if(var != 0.0){
+    if(var != 0.0 && var != 6.0 && var != 7.0){
       result += (LightRes2.diffuse + LightRes2.specular);
       if(var == 5.0){
         result = (LightRes1.ambient + LightRes2.diffuse + LightRes2.specular);
@@ -518,7 +525,7 @@ void main(void) {
     fragColor = vec4(result, final_alpha);
 
     // ADD FOG
-    if(var == 0.0){
+    if(var == 0.0 || var == 6.0 || var == 7.0 || var == 8.0 || var == 9.0){
       //float FogCoord = abs(EyeSpacePos.z/EyeSpacePos.w);
       float temp_dist = distance(FragPos, mid_fog_position);
       fragColor = mix(fragColor, fog_color, FogCalculation(0.0,0.0,fog_density,fog_equation,/*FogCoord*/ temp_dist));  
