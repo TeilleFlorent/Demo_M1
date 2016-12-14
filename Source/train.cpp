@@ -54,7 +54,8 @@ static GLuint groundVBO = 0;
 static GLuint screenVBO = 0;
 
 // FBO
-GLuint feu_depth_FBO; // FBO lié a la texture depth map
+GLuint feu_depth_FBO;
+GLuint feu_depth_FBO_final;
 GLuint particle_render_FBO;
 GLuint particle_depth_FBO;
 GLuint house_depth_FBO;
@@ -67,6 +68,7 @@ GLuint pingpongFBO[2];
 GLuint pingpongRBO[2];
 GLuint final_FBO[2];
 GLuint final_RBO[2];
+GLuint feu_depth_RBO;
 
 // identifiant du (futur) identifiant de texture
 static GLuint tex_cube_map = 0;
@@ -74,8 +76,8 @@ static GLuint tex_ground_color = 0;
 static GLuint tex_ground_normal = 0;
 static GLuint tex_ground_AO = 0;
 static GLuint tex_particule = 0;
-static GLuint tex_pre_rendu_feu = 0;
-static GLuint tex_depth_feu = 0; 
+static GLuint tex_pre_rendu_feu = 0; 
+static GLuint tex_depth_feu_final = 0; 
 static GLuint tex_depth_particle = 0;
 static GLuint tex_pre_rendu_feu2 = 0;
 static GLuint tex_depth_feu2 = 0; 
@@ -165,7 +167,7 @@ float fog_equation = 2.0;
 static float VL_intensity_max = 1.3;
 static float VL_intensity = 0.0;
 static float VL_offset_factor_max = 0.9;
-static float VL_offset_factor = VL_offset_factor_max;
+static float VL_offset_factor = 0.0;
 
 static int shadow_point_light = 0;
 
@@ -346,8 +348,6 @@ static void quit(void) {
     glDeleteTextures(1, &tex_particule);
   if(tex_pre_rendu_feu)
     glDeleteTextures(1, &tex_pre_rendu_feu);
-  if(tex_depth_feu)
-    glDeleteTextures(1, &tex_depth_feu);
   if(tex_depth_particle)
     glDeleteTextures(1, &tex_depth_particle);
   if(tex_pre_rendu_feu2)
@@ -601,7 +601,8 @@ glGenVertexArrays(1, &screenVAO);
 
 
 // GEN LES FBO
-glGenFramebuffers(1, &feu_depth_FBO);  // FBO depth map particle
+glGenFramebuffers(1, &feu_depth_FBO);  
+glGenFramebuffers(1, &feu_depth_FBO_final);  
 glGenFramebuffers(1, &particle_render_FBO);
 glGenFramebuffers(1, &particle_depth_FBO);
 glGenFramebuffers(1, &reflection_cubeMap_FBO);
@@ -614,6 +615,7 @@ glGenFramebuffers(1, &final_FBO[0]);
 glGenRenderbuffers(1, &final_RBO[0]);
 glGenFramebuffers(1, &final_FBO[1]);
 glGenRenderbuffers(1, &final_RBO[1]);
+glGenRenderbuffers(1, &feu_depth_RBO);
 
 
 //////////////////////////////
@@ -771,24 +773,21 @@ glBindTexture(GL_TEXTURE_2D, 0);
   depth_map_res_y = depth_map_res_x * ((float)h/(float)w);
   //std::cout << "res y = " <<  depth_map_res_y  << std::endl;
 
-  glGenTextures(1, &tex_depth_feu);
-  glBindTexture(GL_TEXTURE_2D, tex_depth_feu);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, depth_map_res_x, depth_map_res_y, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+  glGenTextures(1, &tex_depth_feu_final);
+  glBindTexture(GL_TEXTURE_2D, tex_depth_feu_final);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, depth_map_res_x*2.0, depth_map_res_y*2.0, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, /*GL_NEAREST*/ GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, /*GL_NEAREST*/GL_LINEAR);
-  //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER); 
-  //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-  //GLfloat borderColor[] = { 1.0, 1.0, 1.0, 1.0 };
-  //glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
-  //glBindTexture(GL_TEXTURE_2D, 0);
-
+  
   // attach tex au FBO 
-  glBindFramebuffer(GL_FRAMEBUFFER, feu_depth_FBO);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, tex_depth_feu, 0);
+  glBindFramebuffer(GL_FRAMEBUFFER, feu_depth_FBO_final);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D , tex_depth_feu_final, 0);
   //glDrawBuffer(GL_NONE);
   //glReadBuffer(GL_NONE);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glBindTexture(GL_TEXTURE_2D, 0);
 
+   
   // TEX DEPTH MAP PARTICLE
   depth_map_res_x = depth_map_res_seed;
   depth_map_res_y = depth_map_res_x * ((float)h/(float)w);
@@ -932,9 +931,6 @@ glBindTexture(GL_TEXTURE_2D, 0);
 
 
   ///////////// TEX COLOR VL 
-  tex_VL_res_x = tex_VL_res_seed;  
-  tex_VL_res_y = tex_VL_res_x * ((float)h/(float)w);
-
   tex_VL_res_x = w;
   tex_VL_res_y = h;
   //tex_VL_res_y = tex_VL_res_x * ((float)h/(float)w);
@@ -985,8 +981,8 @@ glBindTexture(GL_TEXTURE_2D, 0);
   
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex_VL_res_x, tex_VL_res_y, 0, GL_RGBA, GL_FLOAT, NULL);
   
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, /*GL_LINEAR*/ GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, /*GL_LINEAR*/ GL_NEAREST);
   
   /*glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
@@ -995,10 +991,10 @@ glBindTexture(GL_TEXTURE_2D, 0);
   // RBO & FBO attach
   glBindFramebuffer(GL_FRAMEBUFFER, final_FBO[i]);
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D , tex_final_color[i], 0);
-  glBindRenderbuffer(GL_RENDERBUFFER, final_RBO[i]);
+  /*glBindRenderbuffer(GL_RENDERBUFFER, final_RBO[i]);
   glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, tex_VL_res_x, tex_VL_res_y);
   glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT , GL_RENDERBUFFER, final_RBO[i]);
-  glBindRenderbuffer(GL_RENDERBUFFER, 0);
+  glBindRenderbuffer(GL_RENDERBUFFER, 0);*/
   
 
   Status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
@@ -1648,6 +1644,10 @@ void camera_script(){
   }
 
   if(step >= 20 && (VL_intensity < VL_intensity_max)){
+    if(VL_offset_factor < VL_offset_factor_max)
+      VL_offset_factor += ground->dt * -1.0 * 0.2;
+
+
     VL_intensity += ground->dt * -1.0 * 0.25;
   }
 
@@ -1715,7 +1715,7 @@ double bezier(double A,  // Start value
 
 
   if(fly_state == true)
-    camera_speed = walk_speed*50;
+    camera_speed = walk_speed*5;
 
   //printf("camera_speed = %f\n", camera_speed);
 
@@ -2076,7 +2076,7 @@ static void draw() {
 
  glBindFramebuffer(GL_READ_FRAMEBUFFER, VL_FBO[0]);
  glBindFramebuffer(GL_DRAW_FRAMEBUFFER, final_FBO[0]);        
- glBlitFramebuffer(0, 0, tex_VL_res_x, tex_VL_res_y, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);     
+ glBlitFramebuffer(0, 0, tex_VL_res_x, tex_VL_res_y, 0, 0, w, h, GL_COLOR_BUFFER_BIT, /*GL_NEAREST*/ GL_LINEAR);     
  glBindFramebuffer(GL_FRAMEBUFFER, 0);   
 
 
@@ -2154,6 +2154,7 @@ void Pre_rendu_feu(glm::mat4 projectionMatrix, glm::mat4 viewMatrix, float face_
 
 
   /////////////////////////// DRAW DEPTH PARTICULES     
+  if(face_cube == -1){
   glBindFramebuffer(GL_FRAMEBUFFER, particle_depth_FBO);
   if(face_cube != -1){
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, tex_depth_particle2, 0);
@@ -2179,13 +2180,18 @@ void Pre_rendu_feu(glm::mat4 projectionMatrix, glm::mat4 viewMatrix, float face_
 
   glUseProgram(0);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);        
-
+  }
   ////////////////////// DRAW DEPTH FEU DE CAMP
-  glBindFramebuffer(GL_FRAMEBUFFER, feu_depth_FBO);
+  if(face_cube == -1){
+  glBindFramebuffer(GL_FRAMEBUFFER, feu_depth_FBO_final);
   if(face_cube != -1){
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, tex_depth_feu2, 0);
   }else{
-   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, tex_depth_feu, 0);
+   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, /*GL_TEXTURE_2D_MULTISAMPLE*/ GL_TEXTURE_2D, tex_depth_feu_final /*tex_depth_feu*/, 0);
+  }
+  
+  if(face_cube == -1){
+    glViewport(0, 0, depth_map_res_x*2.0, depth_map_res_y*2.0);
   }
 
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -2214,6 +2220,11 @@ void Pre_rendu_feu(glm::mat4 projectionMatrix, glm::mat4 viewMatrix, float face_
   glUseProgram(0);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);        
   
+
+  if(face_cube == -1){
+    glViewport(0, 0, depth_map_res_x, depth_map_res_y); 
+  }
+  }
   /////////////////////////// DRAW PARTICULES     
   glBindFramebuffer(GL_FRAMEBUFFER, particle_render_FBO);
   if(face_cube != -1){
@@ -2248,9 +2259,10 @@ void Pre_rendu_feu(glm::mat4 projectionMatrix, glm::mat4 viewMatrix, float face_
   glBindFramebuffer(GL_FRAMEBUFFER, 0);        
   glClearColor(0.3f, 0.3f, 0.3f, 1.0f);
 
+
+
 ///////////////////////
-  
-  //glViewport(0, 0, w, h);
+
 
 }
 
@@ -2813,13 +2825,13 @@ void RenderShadowedObjects(bool VL_pre_rendering){
 
 
   // DRAW LAMP
- /*lamp_shader.Use();
+/* lamp_shader.Use();
  
  glBindVertexArray(lampVAO);
 
  Msend= glm::mat4();
  Msend = glm::translate(Msend, lights[1].lightPos);
- Msend = glm::scale(Msend, glm::vec3(0.07f)); 
+ Msend = glm::scale(Msend, glm::vec3(0.02f)); 
 
  glm::vec3 lampColor(0.2,0.2,0.9);
 
@@ -3562,7 +3574,7 @@ void RenderShadowedObjects(bool VL_pre_rendering){
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, tex_particule);
   glActiveTexture(GL_TEXTURE1);
-  glBindTexture(GL_TEXTURE_2D, tex_depth_feu);
+  glBindTexture(GL_TEXTURE_2D, tex_depth_feu_final);
   glActiveTexture(GL_TEXTURE2);
   glBindTexture(GL_TEXTURE_2D, tex_pre_rendu_feu);
 
@@ -3711,6 +3723,11 @@ void fire_script(){
 static int state = 1;
 static int state2 = 1;
 static float acc = 0.5;
+static float min_pos_max = 0.25;
+static float max_pos_max = 0.75;
+static float min_pos = min_pos_max;
+static float max_pos = max_pos_max;
+
 /*
   if(glm::distance(cameraPos,particules_pos) > 4.0){
     Mix_Volume(3,0);
@@ -3740,12 +3757,15 @@ static float acc = 0.5;
     state = 1;
   }
 
+
   // dynamic pos fire light source
-  if(acc <= 0.25){
+  if(acc <= min_pos){
     state2 = 1;
+    max_pos = rand_FloatRange(max_pos_max * 0.65, max_pos_max); 
   }
-  if(acc >= 0.75){
+  if(acc >= max_pos){
     state2 = 0;
+    min_pos = rand_FloatRange(min_pos_max * 0.65, min_pos_max);
   }
 
   if(state2 == 0){
