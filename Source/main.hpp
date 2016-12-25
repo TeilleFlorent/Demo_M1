@@ -3,7 +3,6 @@
 #include "skinning.hpp"
 #include "classic_model.hpp"
 
-
 #include <string>
 #include <fstream>
 #include <sstream>
@@ -85,18 +84,10 @@ GLuint loadCubemap(vector<const GLchar*>);
 static GLfloat * buildSphere(int, int);
 void Pre_rendu_feu(glm::mat4, glm::mat4,float);
 void RenderShadowedObjects(bool);
-GLint TextureFromFile(const char* path, string directory);
 void SetBoneTransform(uint , const glm::mat4&, int);
-float MyBarryCentric(glm::vec3 , glm::vec3 , glm::vec3 , glm::vec2);
-glm::mat4 door_script();
-glm::mat4 zombie_script();
-static void marche_script();
-glm::vec3 walk_script();
 void camera_script();
 void audio_script(int, double);
 void fire_script();
-void fall_script();
-void script();
 void Pre_rendu_cubeMap();
 void Pre_rendu_shadow_house(glm::mat4, glm::mat4);
 void Pre_rendu_shadow_cubeMap();

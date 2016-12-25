@@ -28,10 +28,6 @@ SkinnedMesh_animation paladin_sitting_idle;
 SkinnedMesh_animation paladin_standing_up;
 SkinnedMesh_animation paladin_breathing_idle;
 SkinnedMesh_animation paladin_warrior_idle;
-vector<glm::mat4> Transforms;
-
-
-static GLint m_boneLocation[MAX_BONES];
 
 
 // HEIGHT MAP    
@@ -42,7 +38,6 @@ static GLuint skyboxVAO = 0;
 static GLuint lampVAO = 0;
 static GLuint groundVAO = 0;
 static GLuint screenVAO = 0;
-
 
 // VBOs
 static GLuint skyboxVBO = 0;
@@ -67,7 +62,7 @@ GLuint final_FBO[2];
 GLuint final_RBO[2];
 GLuint feu_depth_RBO;
 
-// identifiant du (futur) identifiant de texture
+// all no models textures
 static GLuint tex_cube_map = 0;
 static GLuint tex_ground_color = 0;
 static GLuint tex_ground_normal = 0;
@@ -94,19 +89,18 @@ float tex_VL_res_seed = 2048.0;
 float tex_VL_res_x, tex_VL_res_y;
 
 
-
 //dimension fenetre SDL
 static int w = 800 * 1.5;
 static int h = 600 * 1.5;
 static int final_w = w;
 static int final_h = h;
 
-
+// camera para
 static glm::vec3 cameraPos   = glm::vec3(-0.591501,5.29917,0.0557512);
 static glm::vec3 cameraFront = glm::vec3(0.95, 0.0, -0.3);
 static glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f,  0.0f);
 static float walk_speed = 0.1;
-static float taille = 0.8f; // en mode fps
+
 
 static float yaw = -18;
 static float pitch = -1.6;
@@ -122,9 +116,9 @@ static objet house;
 static objet sword;
 static objet shield;
 static objet * trees;
-static int nb_tree = 3;
+static int nb_tree = 2;
 static objet * rocks;
-static int nb_rock = 3;
+static int nb_rock = 2;
 
 //sphere para
 static int longi = 10;
@@ -143,14 +137,12 @@ GLboolean fly_state = true;
 // data cube map texture
 std::vector<const GLchar*> faces;
 
-
 // PARTICULE
 ParticleGenerator * Particles;
-glm::vec3 particules_pos(-1.27, 4.961, 0.03); 
-static float fire_intensity = 1.0f;
 
-// bias shadow
+// SHADOW PARA
 static float send_bias = 0.002;
+static int shadow_point_light = 0;
 
 // FOG PARA
 static float skybox_alpha = 0.99;
@@ -165,8 +157,6 @@ static float VL_intensity_max = 1.3;
 static float VL_intensity = 0.0;
 static float VL_offset_factor_max = 0.9;
 static float VL_offset_factor = 0.0;
-
-static int shadow_point_light = 0;
 
 // SOUNDS
 static Mix_Music * S_main_music = NULL;
@@ -204,8 +194,6 @@ int main() {
    SDL_SetRelativeMouseMode(SDL_TRUE);
 
     initGL(_win);
-
-    initData();
 
     // compilation des shaders
     basic_shader.set_shader("../shaders/basic.vs","../shaders/basic.fs");
@@ -286,32 +274,18 @@ int main() {
     paladin_standing_up.LoadAnimation("../Models/paladin_skinned/paladin/paladin/paladin/paladin/paladin/standing_up.fbx");
     paladin_warrior_idle.LoadAnimation("../Models/paladin_skinned/paladin/paladin/paladin/paladin/paladin/warrior_idle.fbx");
     
+
     // gen le tab de uniform location du tab de bone dans les shader
     skinning_shader.Use();
-    for (unsigned int i = 0 ; i < ARRAY_SIZE_IN_ELEMENTS(m_boneLocation) ; i++) {
+    for (unsigned int i = 0 ; i < ARRAY_SIZE_IN_ELEMENTS(paladin_skinned.m_boneLocation) ; i++) {
       char Name[128];
       memset(Name, 0, sizeof(Name));
       SNPRINTF(Name, sizeof(Name), "gBones[%d]", i);
 
-      m_boneLocation[i] = glGetUniformLocation(skinning_shader.Program, Name);    
+      paladin_skinned.m_boneLocation[i] = glGetUniformLocation(skinning_shader.Program, Name);    
 
     }
     glUseProgram(0);
-
-    /*depth_map_shader.Use();
-    for (uint i = 0 ; i < ARRAY_SIZE_IN_ELEMENTS(m_boneLocation2) ; i++) {
-      char Name[128];
-      memset(Name, 0, sizeof(Name));
-      SNPRINTF(Name, sizeof(Name), "gBones[%d]", i);
-
-      //std::cout << temp_name << std::endl;
-
-      m_boneLocation2[i] = glGetUniformLocation(depth_map_shader.Program, Name);    
-
-      //std::cout << "bone location " << i << "= " << m_boneLocation[i] << std::endl;    
-    }
-    glUseProgram(0);
-*/
 
     // generation du ground via une heigh map 
     MyMap.LoadHeightMapFromImage("../Textures/height_map3.jpeg");
@@ -319,9 +293,9 @@ int main() {
     if(MyMap.bLoaded)
       printf("Map generé\n\n");    
 
-
     Particles = new ParticleGenerator(particule_shader, 1000);
   
+    initData();
 
     loop(_win);
 
@@ -454,6 +428,7 @@ void initAudio() {
 
 }
 
+
 void load_audio(){
 
   if(!(S_wind_lowland = Mix_LoadWAV("../Sounds/wind.wav"))){ 
@@ -468,7 +443,6 @@ void load_audio(){
   if(!(S_main_music = Mix_LoadMUS("../Sounds/Blonde Redhead - For the Damaged Coda.mp3"))) {
      fprintf(stderr, "BUG : %s\n", Mix_GetError());
   }  
-
 
 
 }
@@ -596,13 +570,13 @@ glGenVertexArrays(1, &groundVAO);
 glGenVertexArrays(1, &screenVAO);
 
 
-// GEN LES FBO
+// GEN FBO & RBO
 glGenFramebuffers(1, &feu_depth_FBO);  
 glGenFramebuffers(1, &feu_depth_FBO_final);  
 glGenFramebuffers(1, &particle_render_FBO);
 glGenFramebuffers(1, &particle_depth_FBO);
 glGenFramebuffers(1, &reflection_cubeMap_FBO);
-glGenRenderbuffers(1, &reflection_cubeMap_RBO); // RBO du FBO
+glGenRenderbuffers(1, &reflection_cubeMap_RBO);
 glGenFramebuffers(1, &house_depth_FBO);
 glGenFramebuffers(1, &VL_FBO[0]);
 glGenRenderbuffers(1, &VL_RBO[0]);
@@ -693,7 +667,7 @@ glGenerateMipmap(GL_TEXTURE_2D);
 glBindTexture(GL_TEXTURE_2D, 0);
 
 
-// texture ground normal
+// texture ground AO
 glGenTextures(1, &tex_ground_AO);
 glBindTexture(GL_TEXTURE_2D, tex_ground_AO);
   
@@ -966,7 +940,7 @@ glBindTexture(GL_TEXTURE_2D, 0);
   glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, 0);
   }
 
-  ///////////// TEX FINLA OUTPUT
+  ///////////// TEX FINAL OUTPUT
   
   tex_VL_res_x = w;
   tex_VL_res_y = h;
@@ -1075,33 +1049,7 @@ glBindTexture(GL_TEXTURE_2D, 0);
     glBindRenderbuffer(GL_RENDERBUFFER, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
   
-  //}
   
-  // OLD PING PONG INIT
-  /*glGenFramebuffers(2, pingpongFBO);
-  glGenRenderbuffers(2, pingpongRBO);
-  glGenTextures(2, pingpongColorbuffers);
-  for (GLuint i = 0; i < 2; i++)
-  {
-    glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[i]);
-    glBindTexture(GL_TEXTURE_2D, pingpongColorbuffers[i]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, reflection_cubeMap_res, reflection_cubeMap_res, 0, GL_RGBA, GL_FLOAT, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); 
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, pingpongColorbuffers[i], 0);
-    // Also check if framebuffers are complete (no need for depth buffer)
- 
-    glBindRenderbuffer(GL_RENDERBUFFER, pingpongRBO[i]);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, reflection_cubeMap_res, reflection_cubeMap_res);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, pingpongRBO[i]);
-
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-      std::cout << "Framebuffer not complete!" << std::endl;
-    //glBindRenderbuffer(GL_RENDERBUFFER, 0);
-    //glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  
-  }*/
-
 //////////////////////////////
 // LIGHT INIT
 lights = new light[3];
@@ -1116,7 +1064,7 @@ lights[0].lightSpecularColor*= 3.0;
 // fire
 lights[1].lightColor = glm::vec3(255.0/255.0, (/*147.0*/(197)/255.0), ((143)/255.0));
 lights[1].lightSpecularColor = glm::vec3(/*1.0,1.0,1.0*/ 255.0/255.0, ((200.0)/255.0), ((180.0)/255.0)) * 1.0f;
-lights[1].lightPos = glm::vec3(particules_pos.x,particules_pos.y + 0.11f,particules_pos.z);
+lights[1].lightPos = glm::vec3(Particles->particules_pos.x,Particles->particules_pos.y + 0.11f,Particles->particules_pos.z);
 lights[1].save_lightPos = lights[1].lightPos;
 
 // fake light pos use for shadow house && VL;
@@ -1164,9 +1112,9 @@ ground->shadow_darkness = 0.65;
 
  Feu.alpha = 1.0;
 
- Feu.x=particules_pos.x /*+ 1.0*/;
- Feu.y= particules_pos.y - 0.11;
- Feu.z=particules_pos.z;
+ Feu.x=Particles->particules_pos.x /*+ 1.0*/;
+ Feu.y= Particles->particules_pos.y - 0.11;
+ Feu.z=Particles->particules_pos.z;
 
  Feu.start=0.0;
  Feu.dt=0.0;
@@ -1381,10 +1329,6 @@ ground->shadow_darkness = 0.65;
  static void loop(SDL_Window * win) {
 
 
-  /*Uint32 t;
-  t = SDL_GetTicks();
-*/
-
   SDL_GL_SetSwapInterval(1);
 
   
@@ -1414,10 +1358,10 @@ ground->shadow_darkness = 0.65;
 
     //printf("lightX = %f, Y = %f, Z = %f\n", lights[1].lightPos.x,  lights[1].lightPos.y,  lights[1].lightPos.z);
    
-    //lights[1].lightPos = glm::vec3(particules_pos.x,particules_pos.y + 0.08f,particules_pos.z);
-    /*Feu.x = particules_pos.x;
-    Feu.y = particules_pos.y - 0.11;
-    Feu.z = particules_pos.z;*/
+    //lights[1].lightPos = glm::vec3(Particles->particules_pos.x,Particles->particules_pos.y + 0.08f,Particles->particules_pos.z);
+    /*Feu.x = Particles->particules_pos.x;
+    Feu.y = Particles->particules_pos.y - 0.11;
+    Feu.z = Particles->particules_pos.z;*/
 
     }
 
@@ -1694,13 +1638,6 @@ double bezier(double A,  // Start value
 }
 
 
-/*!\brief Cette fonction permet de gérer les évènements clavier et
- * souris via la bibliothèque SDL et pour la fenêtre pointée par \a
- * win.
- *
- * \param win le pointeur vers la fenêtre SDL pour laquelle nous avons
- * attaché le contexte OpenGL.
- */
  static void manageEvents(SDL_Window * win) {
 
   SDL_Event event;
@@ -1744,44 +1681,6 @@ double bezier(double A,  // Start value
 
 //////////////////////////////////////
 
-/*if(cameraM == 1){
-
-  yaw -= 80.0*ground->dt;
-  front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch)) ;
-  front.y = sin(glm::radians(pitch));
-  front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
-  cameraFront = glm::normalize(front); 
-
-}
-
-if(cameraK == 1){
-  yaw += 80.0*ground->dt;
-  front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
-  front.y = sin(glm::radians(pitch));
-  front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
-  cameraFront = glm::normalize(front);
-
-}
-
-if(cameraO == 1){
-  if(pitch < 89.0){
-    pitch -= 80.0*ground->dt;
-    front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
-    front.y = sin(glm::radians(pitch));
-    front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
-    cameraFront = glm::normalize(front);
-  }
-}
-
-if(cameraL == 1){
-  if(pitch > -89.0){
-    pitch += 80.0*ground->dt;
-    front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
-    front.y = sin(glm::radians(pitch));
-    front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
-    cameraFront = glm::normalize(front);
-  }
-}*/
 
 
 while(SDL_PollEvent(&event))
@@ -1855,26 +1754,6 @@ while(SDL_PollEvent(&event))
      std::cout << "y = " <<  rocks[1].y << std::endl;
      break;
 
-    /* case 'm' :
-
-     cameraM = 1;
-
-     break;
-
-     case 'k' :
-
-     cameraK = 1;
-
-     break;
-
-     case 'o' :
-     cameraO = 1;
-     break;
-
-     case 'l' :
-     cameraL = 1;
-     break;*/
-
      
      case 'v' :
      //std::cout << "test = " <<  ((float)h/(float)w)  << std::endl ;
@@ -1924,28 +1803,8 @@ while(SDL_PollEvent(&event))
     break;
 
 
-    /*case 'm' :
-
-    cameraM = 0;
-    break;
-
-    case 'k' :
-
-    cameraK = 0;
-    break;
-
-    case 'o' :
-
-    cameraO = 0;
-    break;
-
-    case 'l' :
-    cameraL = 0;
-    break;*/
-
   }
   break;
-
 
 
 
@@ -2163,7 +2022,7 @@ void Pre_rendu_feu(glm::mat4 projectionMatrix, glm::mat4 viewMatrix, float face_
   particule_shader.Use();   
 
   Msend = glm::mat4(1.0);
-  Msend = glm::translate(Msend, glm::vec3(particules_pos.x,particules_pos.y,particules_pos.z));     
+  Msend = glm::translate(Msend, glm::vec3(Particles->particules_pos.x,Particles->particules_pos.y,Particles->particules_pos.z));     
 
   glUniformMatrix4fv(glGetUniformLocation(particule_shader.Program, "projection"), 1, GL_FALSE, glm::value_ptr(projectionM));
   glUniformMatrix4fv(glGetUniformLocation(particule_shader.Program, "view"), 1, GL_FALSE, glm::value_ptr(viewM));
@@ -2240,7 +2099,7 @@ void Pre_rendu_feu(glm::mat4 projectionMatrix, glm::mat4 viewMatrix, float face_
   
 
   Msend = glm::mat4(1.0);
-  Msend = glm::translate(Msend, glm::vec3(particules_pos.x,particules_pos.y,particules_pos.z));    
+  Msend = glm::translate(Msend, glm::vec3(Particles->particules_pos.x,Particles->particules_pos.y,Particles->particules_pos.z));    
 
   glUniformMatrix4fv(glGetUniformLocation(particule_shader.Program, "projection"), 1, GL_FALSE, glm::value_ptr(projectionM));
   glUniformMatrix4fv(glGetUniformLocation(particule_shader.Program, "view"), 1, GL_FALSE, glm::value_ptr(viewM));
@@ -2378,7 +2237,7 @@ void Pre_rendu_cubeMap(){
       glUniform1f(glGetUniformLocation(basic_shader.Program, "constant[1]"),1.0f);
       glUniform1f(glGetUniformLocation(basic_shader.Program, "linear[1]"),  0.7);
       glUniform1f(glGetUniformLocation(basic_shader.Program, "quadratic[1]"), 1.8);
-      glUniform1f(glGetUniformLocation(basic_shader.Program, "fire_intensity"), fire_intensity);
+      glUniform1f(glGetUniformLocation(basic_shader.Program, "fire_intensity"), Particles->fire_intensity);
 
 
       glUniform1f(glGetUniformLocation(basic_shader.Program, "ambientSTR"), Feu.AmbientStr);
@@ -2419,7 +2278,7 @@ void Pre_rendu_cubeMap(){
 
 
       Msend = glm::mat4(1.0);
-      Msend = glm::translate(Msend, glm::vec3(particules_pos.x,particules_pos.y,particules_pos.z));
+      Msend = glm::translate(Msend, glm::vec3(Particles->particules_pos.x,Particles->particules_pos.y,Particles->particules_pos.z));
      
 
       glUniformMatrix4fv(glGetUniformLocation(particule_shader.Program, "projection"), 1, GL_FALSE, glm::value_ptr(projectionM));
@@ -2645,8 +2504,8 @@ void Pre_rendu_shadow_cubeMap(){
     if(i ==  0 || i == 4){
       skinning_shader.Use();
 
-      for (uint i = 0 ; i < Transforms.size() ; i++) {
-        SetBoneTransform(i, Transforms[i],1);
+      for (uint i = 0 ; i < paladin_skinned.Transforms.size() ; i++) {
+        SetBoneTransform(i, paladin_skinned.Transforms[i],1);
       }
 
       Msend = glm::mat4();
@@ -2884,7 +2743,7 @@ void RenderShadowedObjects(bool VL_pre_rendering){
  glUniform1f(glGetUniformLocation(basic_shader.Program, "constant[1]"),1.0f);
  glUniform1f(glGetUniformLocation(basic_shader.Program, "linear[1]"),  0.14);
  glUniform1f(glGetUniformLocation(basic_shader.Program, "quadratic[1]"), 0.07);
- glUniform1f(glGetUniformLocation(basic_shader.Program, "fire_intensity"), fire_intensity);
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "fire_intensity"), Particles->fire_intensity);
 
  glUniform3fv(glGetUniformLocation(basic_shader.Program, "LightPos[2]"),1, &lights[2].lightPos[0]);
 
@@ -2958,7 +2817,7 @@ void RenderShadowedObjects(bool VL_pre_rendering){
  glUniform1f(glGetUniformLocation(basic_shader.Program, "constant[1]"),1.0f);
  glUniform1f(glGetUniformLocation(basic_shader.Program, "linear[1]"),  0.7);
  glUniform1f(glGetUniformLocation(basic_shader.Program, "quadratic[1]"), 1.8);
- glUniform1f(glGetUniformLocation(basic_shader.Program, "fire_intensity"), fire_intensity);
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "fire_intensity"), Particles->fire_intensity);
 
 
 
@@ -3018,7 +2877,7 @@ void RenderShadowedObjects(bool VL_pre_rendering){
  glUniform1f(glGetUniformLocation(basic_shader.Program, "constant[1]"),1.0f);
  glUniform1f(glGetUniformLocation(basic_shader.Program, "linear[1]"),  0.35);
  glUniform1f(glGetUniformLocation(basic_shader.Program, "quadratic[1]"), 0.44);
- glUniform1f(glGetUniformLocation(basic_shader.Program, "fire_intensity"), fire_intensity);
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "fire_intensity"), Particles->fire_intensity);
 
 
  glUniform1f(glGetUniformLocation(basic_shader.Program, "ambientSTR"), paladin.AmbientStr);
@@ -3055,7 +2914,7 @@ void RenderShadowedObjects(bool VL_pre_rendering){
   
 
   if(step < 16){
-    paladin_skinned.BoneTransform(RunningTime1, Transforms, paladin_sitting_idle);
+    paladin_skinned.BoneTransform(RunningTime1, paladin_skinned.Transforms, paladin_sitting_idle);
   }
 
   if(step == 16){
@@ -3064,7 +2923,7 @@ void RenderShadowedObjects(bool VL_pre_rendering){
 
     RunningTime2 = (float)((double)ground->t)/1000.0f;
     RunningTime2 = (RunningTime2 - anim2_start) + 3.0f;
-    paladin_skinned.BoneTransform(RunningTime2, Transforms, paladin_standing_up);
+    paladin_skinned.BoneTransform(RunningTime2, paladin_skinned.Transforms, paladin_standing_up);
   }
 
   if(step > 16){
@@ -3073,14 +2932,14 @@ void RenderShadowedObjects(bool VL_pre_rendering){
 
     RunningTime2 = (float)((double)ground->t)/1000.0f;
     RunningTime2 = (RunningTime2 - anim3_start);
-    paladin_skinned.BoneTransform(RunningTime2, Transforms, paladin_warrior_idle);
+    paladin_skinned.BoneTransform(RunningTime2, paladin_skinned.Transforms, paladin_warrior_idle);
   }
 
 
  skinning_shader.Use();
 
-  for (uint i = 0 ; i < Transforms.size() ; i++) {
-  SetBoneTransform(i, Transforms[i],1);
+  for (uint i = 0 ; i < paladin_skinned.Transforms.size() ; i++) {
+  SetBoneTransform(i, paladin_skinned.Transforms[i],1);
  }
 
 
@@ -3123,7 +2982,7 @@ void RenderShadowedObjects(bool VL_pre_rendering){
  glUniform1f(glGetUniformLocation(skinning_shader.Program, "constant[1]"),1.0f);
  glUniform1f(glGetUniformLocation(skinning_shader.Program, "linear[1]"),  0.35);
  glUniform1f(glGetUniformLocation(skinning_shader.Program, "quadratic[1]"), 0.44);
- glUniform1f(glGetUniformLocation(skinning_shader.Program, "fire_intensity"), fire_intensity);
+ glUniform1f(glGetUniformLocation(skinning_shader.Program, "fire_intensity"), Particles->fire_intensity);
 
 
  glUniform1f(glGetUniformLocation(skinning_shader.Program, "ambientSTR"), paladin.AmbientStr);
@@ -3190,7 +3049,7 @@ void RenderShadowedObjects(bool VL_pre_rendering){
  glUniform1f(glGetUniformLocation(basic_shader.Program, "constant[1]"),1.0f);
  glUniform1f(glGetUniformLocation(basic_shader.Program, "linear[1]"),  0.5);
  glUniform1f(glGetUniformLocation(basic_shader.Program, "quadratic[1]"), 0.9);
- glUniform1f(glGetUniformLocation(basic_shader.Program, "fire_intensity"), fire_intensity);
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "fire_intensity"), Particles->fire_intensity);
 
 
  glUniform1f(glGetUniformLocation(basic_shader.Program, "ambientSTR"), house.AmbientStr);
@@ -3257,7 +3116,7 @@ void RenderShadowedObjects(bool VL_pre_rendering){
  glUniform1f(glGetUniformLocation(basic_shader.Program, "constant[1]"),1.0f);
  glUniform1f(glGetUniformLocation(basic_shader.Program, "linear[1]"),  0.5);
  glUniform1f(glGetUniformLocation(basic_shader.Program, "quadratic[1]"), 0.9);
- glUniform1f(glGetUniformLocation(basic_shader.Program, "fire_intensity"), fire_intensity);
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "fire_intensity"), Particles->fire_intensity);
 
 
  glUniform1f(glGetUniformLocation(basic_shader.Program, "ambientSTR"), sword.AmbientStr);
@@ -3319,7 +3178,7 @@ void RenderShadowedObjects(bool VL_pre_rendering){
  glUniform1f(glGetUniformLocation(basic_shader.Program, "constant[1]"),1.0f);
  glUniform1f(glGetUniformLocation(basic_shader.Program, "linear[1]"),  0.5);
  glUniform1f(glGetUniformLocation(basic_shader.Program, "quadratic[1]"), 0.9);
- glUniform1f(glGetUniformLocation(basic_shader.Program, "fire_intensity"), fire_intensity);
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "fire_intensity"), Particles->fire_intensity);
 
 
  glUniform1f(glGetUniformLocation(basic_shader.Program, "ambientSTR"), shield.AmbientStr);
@@ -3382,7 +3241,7 @@ void RenderShadowedObjects(bool VL_pre_rendering){
  glUniform1f(glGetUniformLocation(basic_shader.Program, "constant[1]"),1.0f);
  glUniform1f(glGetUniformLocation(basic_shader.Program, "linear[1]"),  0.5);
  glUniform1f(glGetUniformLocation(basic_shader.Program, "quadratic[1]"), 0.9);
- glUniform1f(glGetUniformLocation(basic_shader.Program, "fire_intensity"), fire_intensity);
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "fire_intensity"), Particles->fire_intensity);
 
 
  glUniform1f(glGetUniformLocation(basic_shader.Program, "ambientSTR"), trees[0].AmbientStr);
@@ -3445,7 +3304,7 @@ void RenderShadowedObjects(bool VL_pre_rendering){
  glUniform1f(glGetUniformLocation(basic_shader.Program, "constant[1]"),1.0f);
  glUniform1f(glGetUniformLocation(basic_shader.Program, "linear[1]"),  0.5);
  glUniform1f(glGetUniformLocation(basic_shader.Program, "quadratic[1]"), 0.9);
- glUniform1f(glGetUniformLocation(basic_shader.Program, "fire_intensity"), fire_intensity);
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "fire_intensity"), Particles->fire_intensity);
 
 
  glUniform1f(glGetUniformLocation(basic_shader.Program, "ambientSTR"), rocks[0].AmbientStr);
@@ -3506,7 +3365,7 @@ void RenderShadowedObjects(bool VL_pre_rendering){
  glUniform1f(glGetUniformLocation(basic_shader.Program, "constant[1]"),1.0f);
  glUniform1f(glGetUniformLocation(basic_shader.Program, "linear[1]"),  0.5);
  glUniform1f(glGetUniformLocation(basic_shader.Program, "quadratic[1]"), 0.9);
- glUniform1f(glGetUniformLocation(basic_shader.Program, "fire_intensity"), fire_intensity);
+ glUniform1f(glGetUniformLocation(basic_shader.Program, "fire_intensity"), Particles->fire_intensity);
 
 
  glUniform1f(glGetUniformLocation(basic_shader.Program, "ambientSTR"), rocks[1].AmbientStr);
@@ -3552,7 +3411,7 @@ void RenderShadowedObjects(bool VL_pre_rendering){
 
 
   Msend = glm::mat4(1.0);
-  Msend = glm::translate(Msend, glm::vec3(particules_pos.x,particules_pos.y,particules_pos.z));
+  Msend = glm::translate(Msend, glm::vec3(Particles->particules_pos.x,Particles->particules_pos.y,Particles->particules_pos.z));
   
 
   glm::mat4 temp(1.0f);
@@ -3700,32 +3559,22 @@ static float max_pos_max = 0.75;
 static float min_pos = min_pos_max;
 static float max_pos = max_pos_max;
 
-/*
-  if(glm::distance(cameraPos,particules_pos) > 4.0){
-    Mix_Volume(3,0);
-  }else{
-    Mix_Volume(3,(MIX_MAX_VOLUME*0.5)/(glm::distance(cameraPos,particules_pos)*2.0));
-  }
-
-  if(!Mix_Playing(3)){  
-    Mix_PlayChannel( 3, S_fire, 0);
-  }*/
 
   //////////////////////////
   
   // dynamic intensity
-  if(fire_intensity < 1.0 && state == 0){
-    fire_intensity += 0.8 * (ground->dt*-1);
+  if(Particles->fire_intensity < 1.0 && state == 0){
+    Particles->fire_intensity += 0.8 * (ground->dt*-1);
   }
 
-  if(fire_intensity > 0.75 && state == 1){
-      fire_intensity -= 0.8 * (ground->dt*-1);
+  if(Particles->fire_intensity > 0.75 && state == 1){
+      Particles->fire_intensity -= 0.8 * (ground->dt*-1);
   }
 
-  if(fire_intensity <= 0.75){
+  if(Particles->fire_intensity <= 0.75){
     state = 0;
   }
-  if(fire_intensity >= 1.0){
+  if(Particles->fire_intensity >= 1.0){
     state = 1;
   }
 
@@ -3765,7 +3614,7 @@ void SetBoneTransform(uint Index, const glm::mat4& Transform, int val){
     assert(Index < MAX_BONES);
  
     if(val == 1){
-       glUniformMatrix4fv(m_boneLocation[Index], 1, /*GL_TRUE*/ GL_FALSE, /*(const GLfloat*)Transform*/ glm::value_ptr(Transform));       
+       glUniformMatrix4fv(paladin_skinned.m_boneLocation[Index], 1, /*GL_TRUE*/ GL_FALSE, /*(const GLfloat*)Transform*/ glm::value_ptr(Transform));       
        //printf("index = %d\n", Index);
       //print_mat4(Transform);
     

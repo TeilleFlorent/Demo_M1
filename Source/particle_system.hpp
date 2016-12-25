@@ -67,13 +67,17 @@ public:
     Shader shader;
     GLuint VAO;
     GLuint lastUsedParticle;
-    
+
+    glm::vec3 particules_pos; 
+    float fire_intensity;
   
 
     ParticleGenerator(Shader shader,GLuint amount): shader(shader), amount(amount)
     {
         this->init();
         lastUsedParticle = 0;
+        particules_pos = glm::vec3(-1.27, 4.961, 0.03);
+        fire_intensity = 1.0f;
     }
 
 

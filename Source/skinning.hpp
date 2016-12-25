@@ -119,6 +119,8 @@ public:
    const aiScene* m_pScene;
    uint m_NumBones;
    vector<BoneInfo> m_BoneInfo;
+   vector<glm::mat4> Transforms;
+   GLint m_boneLocation[MAX_BONES];
 
 
     SkinnedMesh();
