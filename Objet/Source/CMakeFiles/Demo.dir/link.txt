@@ -1,0 +1,1 @@
+/usr/bin/c++      CMakeFiles/Demo.dir/train.cpp.o CMakeFiles/Demo.dir/ground.cpp.o  -o ../../bin/Demo -rdynamic -lGL -lSDL2 -lGLEW -lSDL2_image -lSDL2_mixer -lassimp 
