@@ -1,85 +1,38 @@
-#include <string>
-#include <stdio.h>
-#include <fstream>
-#include <sstream>
-#include <iostream>
-#include <vector>
-#include <map>
-
-#define GLM_FORCE_RADIANS
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
-#include "glm/gtx/string_cast.hpp"
-#include "glm/ext.hpp"
-
-#include <algorithm>
-using namespace std;
-
-#define GLEW_STATIC
-#include <GL/glew.h>
-
-#include <SDL2/SDL_mixer.h>
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_image.h>
+#include "ground.hpp"
+			
 
 
-class MyVbo {
-public:
-	uint uiBuffer;
-	int iSize;
-	int iCurrentSize;
-	int iBufferType;
-	vector<unsigned char> data;
-	bool bDataUploaded;
-};
+	float GroundFromHeightMap::MyBarryCentric(glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, glm::vec2 pos) {
+
+		float det = (p2.z - p3.z) * (p1.x - p3.x) + (p3.x - p2.x) * (p1.z - p3.z);
+		float l1 = ((p2.z - p3.z) * (pos.x - p3.x) + (p3.x - p2.x) * (pos.y - p3.z)) / det;
+		float l2 = ((p3.z - p1.z) * (pos.x - p3.x) + (p1.x - p3.x) * (pos.y - p3.z)) / det;
+		float l3 = 1.0f - l1 - l2;
+
+		return l1 * p1.y + l2 * p2.y + l3 * p3.y;
+	}
 
 
-
-
-class CMultiLayeredHeightmap
-{
-
-	public:
-
-
-		float rand_FloatRange(float a, float b)
-		{
-			return ((b-a)*((float)rand()/RAND_MAX))+a;
-		}	
-
-
-		float MyBarryCentric(glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, glm::vec2 pos) {
-
-			float det = (p2.z - p3.z) * (p1.x - p3.x) + (p3.x - p2.x) * (p1.z - p3.z);
-            float l1 = ((p2.z - p3.z) * (pos.x - p3.x) + (p3.x - p2.x) * (pos.y - p3.z)) / det;
-            float l2 = ((p3.z - p1.z) * (pos.x - p3.x) + (p1.x - p3.x) * (pos.y - p3.z)) / det;
-            float l3 = 1.0f - l1 - l2;
-
-            return l1 * p1.y + l2 * p2.y + l3 * p3.y;
-        }
-
-
-        void RenderHeightmap(){
+	void GroundFromHeightMap::RenderHeightmap(){
 	
-	       glBindVertexArray(uiVAO);
-	       glEnable(GL_PRIMITIVE_RESTART);
-	       glPrimitiveRestartIndex(iRows*iCols);
+		glBindVertexArray(uiVAO);
+		glEnable(GL_PRIMITIVE_RESTART);
+		glPrimitiveRestartIndex(iRows*iCols);
 
-	       int iNumIndices = (iRows-1)*iCols*2 + iRows-1;
-	       glDrawElements(GL_TRIANGLE_STRIP, iNumIndices, GL_UNSIGNED_INT, 0);
-	       glDisable(GL_PRIMITIVE_RESTART);
+		int iNumIndices = (iRows-1)*iCols*2 + iRows-1;
+		glDrawElements(GL_TRIANGLE_STRIP, iNumIndices, GL_UNSIGNED_INT, 0);
+		glDisable(GL_PRIMITIVE_RESTART);
 
-	   }
+	}
 
 	
 
-	   Uint32 Getpixel(SDL_Surface *surface, int x, int y){
-	   	int bpp = surface->format->BytesPerPixel;
+	Uint32 GroundFromHeightMap::Getpixel(SDL_Surface *surface, int x, int y){
+		int bpp = surface->format->BytesPerPixel;
 
-	   	Uint8 *p = (Uint8 *)surface->pixels + y * surface->pitch + x * bpp;
+		Uint8 *p = (Uint8 *)surface->pixels + y * surface->pitch + x * bpp;
 
-	   	switch(bpp) {
+		switch(bpp) {
 	   		case 1:
 	   		return *p;
 	   		break;
@@ -100,14 +53,14 @@ class CMultiLayeredHeightmap
 	   		break;
 
 	   		default:
-            return 0;      
-	   	}
-	   }
+	   		return 0;      
+        }
+    }
 
 
 
-	bool LoadHeightMapFromImage(string sImagePath){
-		
+    bool GroundFromHeightMap::LoadHeightMapFromImage(string sImagePath){
+
 		if(bLoaded)
 		{
 			bLoaded = false;
@@ -120,7 +73,7 @@ class CMultiLayeredHeightmap
 
 	    iRows = t->h;
 	    iCols = t->w;
- 	glGenBuffers(1, &Data_vbo.uiBuffer);
+	    glGenBuffers(1, &Data_vbo.uiBuffer);
         Data_vbo.data.reserve(0);
         Data_vbo.iSize = 0;
         Data_vbo.iCurrentSize = 0;
@@ -151,7 +104,7 @@ class CMultiLayeredHeightmap
         }
 
 	
-   vector< vector<glm::vec3> > vNormals[2];
+        vector< vector<glm::vec3> > vNormals[2];
 
 	   for(int i = 0; i < 2; i++)
         vNormals[i] = vector< vector<glm::vec3> >(iRows-1, vector<glm::vec3>(iCols-1));
@@ -296,7 +249,7 @@ class CMultiLayeredHeightmap
 
 
 
-	float GetHeightFromRealVector(glm::vec3 vRealPosition)
+	float GroundFromHeightMap::GetHeightFromRealVector(glm::vec3 vRealPosition)
 	{
 		int iColumn = int((vRealPosition.x + vRenderScale.x*0.5f)*float(iCols) / (vRenderScale.x));
 		int iRow = int((vRealPosition.z + vRenderScale.z*0.5f)*float(iRows) / (vRenderScale.z));
@@ -311,26 +264,8 @@ class CMultiLayeredHeightmap
 	}
 
 
-	CMultiLayeredHeightmap()
+	GroundFromHeightMap::GroundFromHeightMap()
 	{
 		vRenderScale = glm::vec3(100.0f, 100.0f, 100.0f);
 		fTimePassed = 0.0f;
 	}
-
-//private:
-
-	GLuint uiVAO;
-
-	bool bLoaded;
-	int iRows;
-	int iCols;
-	float fTimePassed;
-
-	glm::vec3 vRenderScale;
-
-
-	MyVbo Data_vbo;
-	MyVbo Indices_vbo;
-
-	vector< vector< glm::vec3> > VertexData;
-};

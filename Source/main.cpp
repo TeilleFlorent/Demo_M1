@@ -1,5 +1,4 @@
-#include "train.hpp"
-#include "ground.cpp"
+#include "main.hpp"
 
 static SDL_Window * _win = NULL;
 static SDL_GLContext _oglContext = NULL;
@@ -32,13 +31,11 @@ SkinnedMesh_animation paladin_warrior_idle;
 vector<glm::mat4> Transforms;
 
 
-
 static GLint m_boneLocation[MAX_BONES];
-static GLint m_boneLocation2[MAX_BONES];
 
 
 // HEIGHT MAP    
-CMultiLayeredHeightmap MyMap;
+GroundFromHeightMap MyMap;
 
 // VAOs
 static GLuint skyboxVAO = 0;
@@ -178,7 +175,7 @@ static Mix_Chunk * S_fire = NULL;
 
 // SCRIPT PARA
 static bool script_on = true;
-static int step = 16;
+static int step = 14;
 static float output_factor = 1.0;
 
 /////////////////////////////////////////////////////////
@@ -1980,7 +1977,7 @@ while(SDL_PollEvent(&event))
 
 int x,y;                      
 
-if(RUN_MODE == 0 || RUN_MODE == 2){
+if(true){
 
 SDL_GetRelativeMouseState(&x,&y);
 
@@ -3772,10 +3769,6 @@ void SetBoneTransform(uint Index, const glm::mat4& Transform, int val){
        //printf("index = %d\n", Index);
       //print_mat4(Transform);
     
-    }
-
-    if(val == 2){
-       glUniformMatrix4fv(m_boneLocation2[Index], 1, /*GL_TRUE*/ GL_FALSE, /*(const GLfloat*)Transform*/ glm::value_ptr(Transform));       
     }
  
 }
