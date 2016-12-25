@@ -165,7 +165,7 @@ static Mix_Chunk * S_fire = NULL;
 
 // SCRIPT PARA
 static bool script_on = true;
-static int step = 14;
+static int step = 0;
 static float output_factor = 1.0;
 
 /////////////////////////////////////////////////////////
@@ -382,7 +382,7 @@ static SDL_Window * initWindow(int w, int h, SDL_GLContext * poglContext) {
 
   if( (win = SDL_CreateWindow("Train", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 
     w, h, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | 
-        SDL_WINDOW_SHOWN /*| SDL_WINDOW_FULLSCREEN*/)) == NULL )
+        SDL_WINDOW_SHOWN | SDL_WINDOW_FULLSCREEN)) == NULL )
     return NULL;
     if( (*poglContext = SDL_GL_CreateContext(win)) == NULL ) {
       SDL_DestroyWindow(win);
@@ -1594,6 +1594,11 @@ void camera_script(){
   if(step == 24 && acc > 0.99){
     //if(output_factor > 0.0)
     output_factor += ground->dt * -1.0 * 0.5;
+    
+    if(output_factor >= 3.0){
+           exit(0);
+    }
+
     Mix_FadeOutMusic(5000);
   }
 
