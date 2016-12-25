@@ -178,7 +178,7 @@ static Mix_Chunk * S_fire = NULL;
 
 // SCRIPT PARA
 static bool script_on = true;
-static int step = 0;
+static int step = 16;
 static float output_factor = 1.0;
 
 /////////////////////////////////////////////////////////
@@ -285,10 +285,9 @@ int main() {
     paladin_skinned.LoadMesh("../Models/paladin_skinned/paladin/paladin/paladin/paladin/paladin/Paladin_w_Prop_J_Nordstrom.fbx");
     //paladin_skinned.Print_info_model();
 
-    paladin_sitting_idle.LoadMesh("../Models/paladin_skinned/paladin/paladin/paladin/paladin/paladin/sitting_idle.fbx");
-    paladin_standing_up.LoadMesh("../Models/paladin_skinned/paladin/paladin/paladin/paladin/paladin/standing_up.fbx");
-    //paladin_breathing_idle.LoadMesh("../Models/paladin_skinned/paladin/paladin/paladin/paladin/paladin/breathing_idle.fbx");
-    paladin_warrior_idle.LoadMesh("../Models/paladin_skinned/paladin/paladin/paladin/paladin/paladin/warrior_idle.fbx");
+    paladin_sitting_idle.LoadAnimation("../Models/paladin_skinned/paladin/paladin/paladin/paladin/paladin/sitting_idle.fbx");
+    paladin_standing_up.LoadAnimation("../Models/paladin_skinned/paladin/paladin/paladin/paladin/paladin/standing_up.fbx");
+    paladin_warrior_idle.LoadAnimation("../Models/paladin_skinned/paladin/paladin/paladin/paladin/paladin/warrior_idle.fbx");
     
     // gen le tab de uniform location du tab de bone dans les shader
     skinning_shader.Use();
@@ -412,7 +411,7 @@ static SDL_Window * initWindow(int w, int h, SDL_GLContext * poglContext) {
 
   if( (win = SDL_CreateWindow("Train", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 
     w, h, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | 
-        SDL_WINDOW_SHOWN | SDL_WINDOW_FULLSCREEN)) == NULL )
+        SDL_WINDOW_SHOWN /*| SDL_WINDOW_FULLSCREEN*/)) == NULL )
     return NULL;
     if( (*poglContext = SDL_GL_CreateContext(win)) == NULL ) {
       SDL_DestroyWindow(win);
@@ -3050,27 +3049,16 @@ void RenderShadowedObjects(bool VL_pre_rendering){
 // CALCUL MATRICES BONES
  float start_anim = 0.0;
 
-//printf("t = %f\n", zombie[0].t);
         
  float RunningTime1, RunningTime2;
  static float anim2_start = -1.0;
  static float anim3_start = -1.0;
 
- //float RunningTime2 = (float)((double)zombie[1].t - ((double)4600.0f+start_anim))/1000.0f; 
- //float RunningTime3 = ((float)((double)zombie[1].t - ((double)6700.0f+4600.0+start_anim))/1000.0f); 
- //float RunningTime4 = ((float)((double)zombie[1].t - ((double)6700.0f+4600.0+3700.0+start_anim))/1000.0f); 
-
-  //std::cout << "t = " << RunningTime1 << std::endl;    
-
- /*if(zombie[0].t < start_anim)
-  paladin_skinned.BoneTransform(0.0, Transforms, paladin_sitting_idle);*/
-
-
  RunningTime1 = (float)((double)ground->t)/1000.0f;
   
 
   if(step < 16){
-    paladin_skinned.BoneTransform(RunningTime1, Transforms, paladin_sitting_idle /*paladin_standing_up*/ /*paladin_breathing_idle*/ /*paladin_warrior_idle*/);
+    paladin_skinned.BoneTransform(RunningTime1, Transforms, paladin_sitting_idle);
   }
 
   if(step == 16){
@@ -3090,19 +3078,6 @@ void RenderShadowedObjects(bool VL_pre_rendering){
     RunningTime2 = (RunningTime2 - anim3_start);
     paladin_skinned.BoneTransform(RunningTime2, Transforms, paladin_warrior_idle);
   }
-
-/*  if(RunningTime3 >= 0.0 && RunningTime3 < 4.6+6.7+3.7+(start_anim/1000.0)){
-
-    zombie_model.BoneTransform(RunningTime3+0.28f, Transforms, zombie_scream);
-  }
-
-  if(RunningTime4 >= 0.0 ){
-
-    zombie_model.BoneTransform(RunningTime4, Transforms, zombie_run);
-  }*/
-         
-  //std::cout << "size = " << Transforms.size() << std::endl;    
-
 
 
  skinning_shader.Use();
